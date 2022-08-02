@@ -106,6 +106,8 @@ public class VgpuSchedulerSpaceShared extends VgpuScheduler {
 				return false;
 			}
 		});
+		vgpu.setPeMips(pgpu.getPeList().get(0).getMips());
+		mipsShare = vgpu.getCurrentRequestedMips();
 		List<Pe> selectedPes = new ArrayList<Pe>();
 		for (int i = 0; i < mipsShare.size(); i++) {
 			Pe pe = selectedPgpuPes.get(i);
