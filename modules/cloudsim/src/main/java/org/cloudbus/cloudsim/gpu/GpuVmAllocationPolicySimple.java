@@ -29,7 +29,9 @@ public class GpuVmAllocationPolicySimple extends GpuVmAllocationPolicy {
 				boolean result = allocateHostForVm(vm, host);
 				if (!result) {
 					continue;
-				} else if (!gpuVm.hasVgpu() || allocateGpuForVgpu(gpuVm.getVgpu(), (GpuHost) host)) {
+				} else if (!gpuVm.hasVgpu()) {
+					return true;
+				} else if (((GpuHost) host).isGpuEquipped() && allocateGpuForVgpu(gpuVm.getVgpu(), (GpuHost) host)) {
 					return true;
 				}
 				deallocateHostForVm(gpuVm);
