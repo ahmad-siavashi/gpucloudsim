@@ -18,7 +18,6 @@ public class GridVideoCardTags {
 	public final static String NVIDIA_K2_CARD = "NVIDIA K2";
 	public final static String NVIDIA_K80_CARD = "NVIDIA K80";
 	public final static String NVIDIA_M60_CARD = "NVIDIA M60";
-	
 
 	public final static int NVIDIA_KEPLER_SMX_CUDA_CORES = 192;
 	public final static int NVIDIA_MAXWELL_SMM_CUDA_CORES = 128;
@@ -42,6 +41,9 @@ public class GridVideoCardTags {
 	/** 4 x 28.5/s */
 	public final static long NVIDIA_K1_CARD_BW_PER_BUS = (long) 28.5 * 1024;
 
+	public final static String[] K1_VGPUS = { GridVgpuTags.K1_K120Q, GridVgpuTags.K1_K140Q, GridVgpuTags.K1_K160Q,
+			GridVgpuTags.K1_K180Q };
+
 	// NVIDIA GRID K2 Spec
 
 	/** 225 Watts */
@@ -60,6 +62,9 @@ public class GridVideoCardTags {
 	public final static int NVIDIA_K2_CARD_NUM_BUS = 2;
 	/** 2 x 160.0 GB/s */
 	public final static long NVIDIA_K2_CARD_BW_PER_BUS = 160 * 1024;
+
+	public final static String[] K2_VGPUS = { GridVgpuTags.K2_K220Q, GridVgpuTags.K2_K240Q, GridVgpuTags.K2_K260Q,
+			GridVgpuTags.K2_K280Q };
 
 	public static double getGpuPeFrequencyFromMips(String type, double mips) {
 		double frequency = mips;

@@ -27,26 +27,27 @@ import org.cloudbus.cloudsim.gpu.GpuHostTags;
 import org.cloudbus.cloudsim.gpu.GpuTask;
 import org.cloudbus.cloudsim.gpu.GpuTaskSchedulerLeftover;
 import org.cloudbus.cloudsim.gpu.GpuVm;
+import org.cloudbus.cloudsim.gpu.GpuVmAllocationPolicySimple;
 import org.cloudbus.cloudsim.gpu.Pgpu;
 import org.cloudbus.cloudsim.gpu.ResGpuTask;
 import org.cloudbus.cloudsim.gpu.Vgpu;
 import org.cloudbus.cloudsim.gpu.VgpuScheduler;
 import org.cloudbus.cloudsim.gpu.VideoCard;
 import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicy;
-import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicyNull;
-import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridGpuVmAllocationPolicyBreadthFirst;
-import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuSchedulerFairShare;
+import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicyBreadthFirst;
+import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuSchedulerFairShareEx;
 import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuTags;
 import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVideoCardTags;
 import org.cloudbus.cloudsim.gpu.interference.InterferenceGpuTaskSchedulerLeftover;
 import org.cloudbus.cloudsim.gpu.interference.models.InterferenceModel;
 import org.cloudbus.cloudsim.gpu.interference.models.InterferenceModelGpuMemory;
+import org.cloudbus.cloudsim.gpu.performance.models.PerformanceModelGpuNull;
 import org.cloudbus.cloudsim.gpu.provisioners.GpuBwProvisionerShared;
 import org.cloudbus.cloudsim.gpu.provisioners.GpuGddramProvisionerSimple;
 import org.cloudbus.cloudsim.gpu.provisioners.VideoCardBwProvisioner;
 import org.cloudbus.cloudsim.gpu.provisioners.VideoCardBwProvisionerShared;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicy;
-import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicyNull;
+import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicyBreadthFirst;
 import org.cloudbus.cloudsim.lists.VmList;
 import org.cloudbus.cloudsim.provisioners.BwProvisionerSimple;
 import org.cloudbus.cloudsim.provisioners.PeProvisionerSimple;
@@ -261,10 +262,9 @@ public class CloudSimGpuExample2 {
 						new GpuGddramProvisionerSimple(gddram), new GpuBwProvisionerShared(bw)));
 			}
 			// Pgpu selection policy
-			PgpuSelectionPolicy pgpuSelectionPolicy = new PgpuSelectionPolicyNull();
+			PgpuSelectionPolicy pgpuSelectionPolicy = new PgpuSelectionPolicyBreadthFirst();
 			// Scheduler
-			VgpuScheduler vgpuScheduler = new GridVgpuSchedulerFairShare(GridVideoCardTags.NVIDIA_K2_CARD, pgpus,
-					pgpuSelectionPolicy);
+			VgpuScheduler vgpuScheduler = new GridVgpuSchedulerFairShareEx(GridVideoCardTags.NVIDIA_K2_CARD, pgpus, pgpuSelectionPolicy, new PerformanceModelGpuNull(), GridVideoCardTags.K2_VGPUS);
 			// PCI Express Bus Bw Provisioner
 			VideoCardBwProvisioner videoCardBwProvisioner = new VideoCardBwProvisionerShared(BusTags.PCI_E_3_X16_BW);
 			// Create a video card
@@ -297,7 +297,7 @@ public class CloudSimGpuExample2 {
 		// Set VM Scheduler
 		VmScheduler vmScheduler = new VmSchedulerTimeShared(peList);
 		// Video Card Selection Policy
-		VideoCardAllocationPolicy videoCardAllocationPolicy = new VideoCardAllocationPolicyNull(videoCards);
+		VideoCardAllocationPolicy videoCardAllocationPolicy = new VideoCardAllocationPolicyBreadthFirst(videoCards);
 		GpuHost newHost = new GpuHost(hostId, GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3, new RamProvisionerSimple(ram),
 				new BwProvisionerSimple(bw), storage, peList, vmScheduler, videoCardAllocationPolicy);
 		hostList.add(newHost);
@@ -331,7 +331,7 @@ public class CloudSimGpuExample2 {
 		// We need to create a Datacenter object.
 		GpuDatacenter datacenter = null;
 		try {
-			datacenter = new GpuDatacenter(name, characteristics, new GridGpuVmAllocationPolicyBreadthFirst(hostList),
+			datacenter = new GpuDatacenter(name, characteristics, new GpuVmAllocationPolicySimple(hostList),
 					storageList, schedulingInterval);
 		} catch (Exception e) {
 			e.printStackTrace();

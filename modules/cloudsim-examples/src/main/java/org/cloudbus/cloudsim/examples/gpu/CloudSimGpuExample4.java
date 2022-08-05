@@ -26,14 +26,14 @@ import org.cloudbus.cloudsim.gpu.GpuHostTags;
 import org.cloudbus.cloudsim.gpu.GpuTask;
 import org.cloudbus.cloudsim.gpu.GpuTaskSchedulerLeftover;
 import org.cloudbus.cloudsim.gpu.GpuVm;
+import org.cloudbus.cloudsim.gpu.GpuVmAllocationPolicySimple;
 import org.cloudbus.cloudsim.gpu.Pgpu;
 import org.cloudbus.cloudsim.gpu.Vgpu;
 import org.cloudbus.cloudsim.gpu.VgpuScheduler;
 import org.cloudbus.cloudsim.gpu.VideoCard;
 import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicy;
-import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicyNull;
-import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridGpuVmAllocationPolicyBreadthFirst;
-import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridPerformanceVgpuSchedulerFairShare;
+import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicyBreadthFirst;
+import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuSchedulerFairShareEx;
 import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuTags;
 import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVideoCardPowerModelK1;
 import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVideoCardTags;
@@ -50,6 +50,7 @@ import org.cloudbus.cloudsim.gpu.provisioners.GpuGddramProvisionerSimple;
 import org.cloudbus.cloudsim.gpu.provisioners.VideoCardBwProvisioner;
 import org.cloudbus.cloudsim.gpu.provisioners.VideoCardBwProvisionerShared;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicy;
+import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicyBreadthFirst;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicyNull;
 import org.cloudbus.cloudsim.lists.VmList;
 import org.cloudbus.cloudsim.power.models.PowerModel;
@@ -259,13 +260,13 @@ public class CloudSimGpuExample4 {
 						new GpuGddramProvisionerSimple(gddram), new GpuBwProvisionerShared(bw)));
 			}
 			// Pgpu selection policy
-			PgpuSelectionPolicy pgpuSelectionPolicy = new PgpuSelectionPolicyNull();
+			PgpuSelectionPolicy pgpuSelectionPolicy = new PgpuSelectionPolicyBreadthFirst();
 			// Performance Model
 			double performanceLoss = 0.1;
 			PerformanceModel<VgpuScheduler, Vgpu> performanceModel = new PerformanceModelGpuConstant(performanceLoss);
 			// Scheduler
-			GridPerformanceVgpuSchedulerFairShare vgpuScheduler = new GridPerformanceVgpuSchedulerFairShare(
-					GridVideoCardTags.NVIDIA_K1_CARD, pgpus, pgpuSelectionPolicy, performanceModel);
+			GridVgpuSchedulerFairShareEx vgpuScheduler = new GridVgpuSchedulerFairShareEx(
+					GridVideoCardTags.NVIDIA_K1_CARD, pgpus, pgpuSelectionPolicy, performanceModel, GridVideoCardTags.K1_VGPUS);
 			// PCI Express Bus Bw Provisioner
 			VideoCardBwProvisioner videoCardBwProvisioner = new VideoCardBwProvisionerShared(BusTags.PCI_E_3_X16_BW);
 			// Video Card Power Model
@@ -304,7 +305,7 @@ public class CloudSimGpuExample4 {
 		double hostStaticPowerPercent = 0.70;
 		PowerModel powerModel = new GpuHostPowerModelLinear(hostMaxPower, hostStaticPowerPercent);
 		// Video Card Selection Policy
-		VideoCardAllocationPolicy videoCardAllocationPolicy = new VideoCardAllocationPolicyNull(videoCards);
+		VideoCardAllocationPolicy videoCardAllocationPolicy = new VideoCardAllocationPolicyBreadthFirst(videoCards);
 		PowerGpuHost newHost = new PowerGpuHost(hostId, GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3,
 				new RamProvisionerSimple(ram), new BwProvisionerSimple(bw), storage, peList, vmScheduler,
 				videoCardAllocationPolicy, powerModel);
@@ -340,7 +341,7 @@ public class CloudSimGpuExample4 {
 		PowerGpuDatacenter datacenter = null;
 		try {
 			datacenter = new PowerGpuDatacenter(name, characteristics,
-					new GridGpuVmAllocationPolicyBreadthFirst(hostList), storageList, schedulingInterval);
+					new GpuVmAllocationPolicySimple(hostList), storageList, schedulingInterval);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
