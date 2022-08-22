@@ -30,6 +30,25 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 		setUsedPes(new ArrayList<Integer>());
 	}
 
+	protected boolean redistributeGpuTaskMips(ResGpuTask rgt) {
+		int numberOfCurrentAvailablePEs = getCurrentMipsShare().size() - getUsedPes().size();
+		int numberOfAllocatedPes = rgt.getPeIdList().size();
+		if (numberOfAllocatedPes < rgt.getGpuTask().getPesLimit() && numberOfCurrentAvailablePEs > numberOfAllocatedPes) {
+			for (int i = 0; i < getCurrentMipsShare().size(); i++) {
+				if (!getUsedPes().contains(i)) {
+					rgt.setPeId(i);
+					getUsedPes().add(i);
+					numberOfAllocatedPes++;
+					if (numberOfAllocatedPes == rgt.getGpuTask().getPesLimit()) {
+						break;
+					}
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+
 	@Override
 	public double updateGpuTaskProcessing(double currentTime, List<Double> mipsShare) {
 		setCurrentMipsShare(mipsShare);
@@ -57,6 +76,13 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 			}
 		}
 		getTaskExecList().removeAll(toRemove);
+		
+		// Redistribute freed resources
+		if(!toRemove.isEmpty()) {
+			for (ResGpuTask rcl : getTaskExecList()) {
+				redistributeGpuTaskMips(rcl);
+			}
+		}
 
 		// for each finished task, add a new one from the waiting list
 		if (!getTaskWaitingList().isEmpty()) {
@@ -203,7 +229,7 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 		rcl.setTaskStatus(GpuTask.SUCCESS);
 		rcl.finalizeTask();
 		List<Integer> pesToRemove = new ArrayList<>();
-		for (Integer peId : getUsedPes()) {
+		for (Integer peId : rcl.getPeIdList()) {
 			pesToRemove.add(peId);
 		}
 		getUsedPes().removeAll(pesToRemove);
