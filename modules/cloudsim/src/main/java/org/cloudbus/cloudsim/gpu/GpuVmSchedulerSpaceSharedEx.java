@@ -37,11 +37,11 @@ public class GpuVmSchedulerSpaceSharedEx extends VmSchedulerSpaceShared {
 		double totalMips = 0;
 		for (int i = 0; i < vm.getNumberOfPes(); i++) {
 			selectedPes.add(pe);
+			totalMips += pe.getPeProvisioner().getMips();
 			if (!peIterator.hasNext()) {
 				break;
 			}
 			pe = peIterator.next();
-			totalMips += pe.getPeProvisioner().getMips();
 		}
 		if (vm.getNumberOfPes() > selectedPes.size()) {
 			return false;

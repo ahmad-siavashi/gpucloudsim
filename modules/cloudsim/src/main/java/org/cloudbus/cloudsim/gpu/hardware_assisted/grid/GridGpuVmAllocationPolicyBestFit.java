@@ -60,8 +60,10 @@ public class GridGpuVmAllocationPolicyBestFit extends GpuVmAllocationPolicy {
 				for (GpuHost pm : getGpuHostList()) {
 					if (pm.isSuitableForVm(gpuVm)) {
 						if (allocateGpuForVgpu(vgpu, pm)) {
-							allocateHostForVm(gpuVm, pm);
-							return true;
+							if (allocateHostForVm(gpuVm, pm)) {
+								return true;
+							}
+							deallocateGpuForVgpu(vgpu);
 						}
 					}
 				}

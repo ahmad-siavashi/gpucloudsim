@@ -300,7 +300,7 @@ public class CloudSimGpuExample6 {
 
 		for (int peId = 0; peId < GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_NUM_PES; peId++) {
 			// Create PEs and add these into a list.
-			peList.add(new Pe(0, new PeProvisionerSimple(mips)));
+			peList.add(new Pe(peId, new PeProvisionerSimple(mips)));
 		}
 
 		// Create Host with its id and list of PEs and add them to the list of machines
@@ -332,10 +332,10 @@ public class CloudSimGpuExample6 {
 
 		for (int peId = 0; peId < GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4_NUM_PES; peId++) {
 			// Create PEs and add these into a list.
-			peList.add(new Pe(0, new PeProvisionerSimple(GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4_PE_MIPS)));
+			peList.add(new Pe(peId, new PeProvisionerSimple(GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4_PE_MIPS)));
 		}
 		powerModel = new GpuHostPowerModelLinear(hostMaxPower, hostStaticPowerPercent);
-		newHost = new PowerGpuHost(0, GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4,
+		newHost = new PowerGpuHost(hostId + 1, GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4,
 				new RamProvisionerSimple(GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4_RAM),
 				new BwProvisionerSimple(GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4_BW),
 				GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4_STORAGE, peList, new VmSchedulerTimeShared(peList), null,

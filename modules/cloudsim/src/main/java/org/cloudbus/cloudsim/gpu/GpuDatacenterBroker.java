@@ -119,7 +119,6 @@ public class GpuDatacenterBroker extends DatacenterBroker {
 			getVmGpuCloudletsSubmitted().put(vmUid, vmCloudlets.size());
 			// Remove submitted cloudlets from queue
 			getCloudletList().removeAll(vmCloudlets);
-			getVmGpuCloudletMap().get(vmUid).removeAll(vmCloudlets);
 			getVmGpuCloudletMap().remove(vmUid);
 		} else {
 			Log.printConcatLine(CloudSim.clock(), ": ", getName(), ": Creation of VM #", vmId,
@@ -141,8 +140,8 @@ public class GpuDatacenterBroker extends DatacenterBroker {
 						"{'clock': " + CloudSim.clock() + ", 'type': 'vm rejection',  'vm': " + vm.getId() + "}");
 				List<GpuCloudlet> vmCloudlets = getVmGpuCloudletMap().get(vmUid);
 				getCloudletList().removeAll(vmCloudlets);
-				getVmGpuCloudletMap().get(vmUid).removeAll(vmCloudlets);
 				getVmGpuCloudletMap().remove(vmUid);
+				finishExecutionIfDone();
 			}
 		}
 	}

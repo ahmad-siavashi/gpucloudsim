@@ -33,4 +33,4 @@ This package contains CloudSim 7.0.1 with the latest version of the GPU extensio
 
 ### Disclaimer
 
-This code is provided as is, and no guarantee is given that this code will preform in the desired way.
+This code is provided as is, and no guarantee is given that this code will perform in the desired way.

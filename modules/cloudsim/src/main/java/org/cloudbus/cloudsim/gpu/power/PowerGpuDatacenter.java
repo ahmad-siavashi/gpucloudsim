@@ -1,6 +1,7 @@
 package org.cloudbus.cloudsim.gpu.power;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -45,7 +46,7 @@ public class PowerGpuDatacenter extends GpuDatacenter {
 			VmAllocationPolicy vmAllocationPolicy, List<Storage> storageList, double schedulingInterval)
 			throws Exception {
 		super(name, characteristics, vmAllocationPolicy, storageList, schedulingInterval);
-		setHostEnergyMap(new HashMap<PowerGpuHost, Double>());
+		setHostEnergyMap(new LinkedHashMap<PowerGpuHost, Double>());
 		setHostCpuEnergyMap(new HashMap<PowerGpuHost, Double>());
 		setHostVideoCardEnergyMap(new HashMap<PowerGpuHost, Map<PowerVideoCard, Double>>());
 		for (Host host : getCharacteristics().<Host>getHostList()) {

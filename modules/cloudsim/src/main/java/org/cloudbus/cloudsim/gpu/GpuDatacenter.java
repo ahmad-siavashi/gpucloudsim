@@ -99,7 +99,7 @@ public class GpuDatacenter extends Datacenter {
 		// R: for term is to allow loop at simulation start. Otherwise, one initial
 		// simulation step is skipped and schedulers are not properly initialized
 		if (CloudSim.clock() < 0.111
-				|| CloudSim.clock() > geGpuTasktLastProcessTime() + CloudSim.getMinTimeBetweenEvents()) {
+				|| CloudSim.clock() > getGpuTaskLastProcessTime() + CloudSim.getMinTimeBetweenEvents()) {
 			List<? extends HostEntity> list = getVmAllocationPolicy().getHostList();
 			double smallerTime = Double.MAX_VALUE;
 			// for each host...
@@ -252,7 +252,7 @@ public class GpuDatacenter extends Datacenter {
 		checkGpuTaskCompletion();
 	}
 
-	protected double geGpuTasktLastProcessTime() {
+	protected double getGpuTaskLastProcessTime() {
 		return gpuTaskLastProcessTime;
 	}
 

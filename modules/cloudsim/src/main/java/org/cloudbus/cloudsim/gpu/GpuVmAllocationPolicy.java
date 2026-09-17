@@ -64,12 +64,45 @@ public abstract class GpuVmAllocationPolicy extends VmAllocationPolicy {
 				getClass().getSimpleName() + " selects hosts in allocateHostForVm(Vm); use allocateHostForGuest instead.");
 	}
 
+	/**
+	 * Allocates the given host and, if the VM has a vGPU, a GPU of that host. If
+	 * the vGPU cannot be allocated, the host allocation is rolled back.
+	 */
 	@Override
 	public boolean allocateHostForGuest(GuestEntity guest, HostEntity host) {
-		if (getVmTable().containsKey(guest.getUid())) {
+		GpuVm gpuVm = (GpuVm) guest;
+		if (!allocateHostForVm(gpuVm, (Host) host)) {
+			return false;
+		} else if (!gpuVm.hasVgpu()) {
+			return true;
+		} else if (((GpuHost) host).isGpuEquipped() && allocateGpuForVgpu(gpuVm.getVgpu(), (GpuHost) host)) {
+			return true;
+		}
+		deallocateHostForVm(gpuVm);
+		return false;
+	}
+
+	/**
+	 * Allocates the given host for the VM without allocating its vGPU.
+	 */
+	@Override
+	public boolean allocateHostForVm(Vm vm, Host host) {
+		if (getVmTable().containsKey(vm.getUid())) {
 			return false;
 		}
-		return super.allocateHostForGuest(guest, host);
+		return super.allocateHostForGuest(vm, host);
+	}
+
+	/**
+	 * Deallocates the host and, if allocated, the vGPU of the VM.
+	 */
+	@Override
+	public void deallocateHostForGuest(GuestEntity guest) {
+		Vgpu vgpu = ((GpuVm) guest).getVgpu();
+		if (vgpu != null && getVgpuHosts().containsKey(vgpu)) {
+			deallocateGpuForVgpu(vgpu);
+		}
+		super.deallocateHostForGuest(guest);
 	}
 
 	protected void deallocateGpuForVgpu(Vgpu vgpu) {
