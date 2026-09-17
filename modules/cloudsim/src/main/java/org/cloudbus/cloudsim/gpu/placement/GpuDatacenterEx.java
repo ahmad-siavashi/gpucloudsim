@@ -11,6 +11,7 @@ import org.cloudbus.cloudsim.DatacenterCharacteristics;
 import org.cloudbus.cloudsim.Log;
 import org.cloudbus.cloudsim.Storage;
 import org.cloudbus.cloudsim.VmAllocationPolicy;
+import org.cloudbus.cloudsim.core.CloudActionTags;
 import org.cloudbus.cloudsim.core.CloudSim;
 import org.cloudbus.cloudsim.core.CloudSimTags;
 import org.cloudbus.cloudsim.core.SimEvent;
@@ -65,11 +66,9 @@ public class GpuDatacenterEx extends PowerGpuDatacenter {
 	@Override
 	protected void processOtherEvent(SimEvent ev) {
 		super.processOtherEvent(ev);
-		switch (ev.getTag()) {
-		case GpuCloudSimTags.GPU_VM_DATACENTER_PLACEMENT:
+		if (ev.getTag() == GpuCloudSimTags.GPU_VM_DATACENTER_PLACEMENT) {
 			runPlacement(getNewVms());
 			schedule(getId(), getPlacementWindow(), GpuCloudSimTags.GPU_VM_DATACENTER_PLACEMENT);
-			break;
 		}
 	}
 
@@ -104,7 +103,7 @@ public class GpuDatacenterEx extends PowerGpuDatacenter {
 			} else {
 				data[2] = CloudSimTags.FALSE;
 			}
-			send(vm.getUserId(), CloudSim.getMinTimeBetweenEvents(), CloudSimTags.VM_CREATE_ACK, data);
+			send(vm.getUserId(), CloudSim.getMinTimeBetweenEvents(), CloudActionTags.VM_CREATE_ACK, data);
 		}
 
 		if (result) {

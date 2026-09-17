@@ -3,7 +3,7 @@
  * Description:  CloudSim (Cloud Simulation) Toolkit for Modeling and Simulation of Clouds
  * Licence:      GPL - http://www.gnu.org/copyleft/gpl.html
  *
- * Copyright (c) 2009-2012, The University of Melbourne, Australia
+ * Copyright (c) 2009-2024, The University of Melbourne, Australia
  */
 
 package org.cloudbus.cloudsim.network.datacenter;
@@ -13,18 +13,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import org.cloudbus.cloudsim.Cloudlet;
-import org.cloudbus.cloudsim.CloudletScheduler;
 import org.cloudbus.cloudsim.Datacenter;
 import org.cloudbus.cloudsim.DatacenterCharacteristics;
-import org.cloudbus.cloudsim.Host;
-import org.cloudbus.cloudsim.Log;
 import org.cloudbus.cloudsim.Storage;
-import org.cloudbus.cloudsim.Vm;
 import org.cloudbus.cloudsim.VmAllocationPolicy;
-import org.cloudbus.cloudsim.core.CloudSim;
-import org.cloudbus.cloudsim.core.CloudSimTags;
-import org.cloudbus.cloudsim.core.SimEvent;
+import org.cloudbus.cloudsim.core.*;
 
 /**
  * NetworkDatacenter class is a {@link Datacenter} whose hostList are virtualized and networked. It contains
@@ -34,7 +27,7 @@ import org.cloudbus.cloudsim.core.SimEvent;
  * method of the superclass, it will not be used, as processing of cloudlets are handled by the
  * CloudletScheduler and processing of VirtualMachines are handled by the VmAllocationPolicy.
  * 
- * @todo If an AllocPolicy is not being used, why it is being created. Perhaps 
+ * //@TODO If an AllocPolicy is not being used, why it is being created. Perhaps
  * a better class hierarchy should be created, introducing some abstract class
  * or interface.
  * 
@@ -46,32 +39,36 @@ import org.cloudbus.cloudsim.core.SimEvent;
  * </ul>
  * 
  * @author Saurabh Kumar Garg
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 3.0
  */
 public class NetworkDatacenter extends Datacenter {
-        /**
-         * A map between VMs and Switches, where each key
-         * is a VM id and the corresponding value is the id of the switch where the VM is connected to.
-         */
-	public Map<Integer, Integer> VmToSwitchid = new HashMap<Integer, Integer>();
+	/**
+	 * A map between VMs and Switches, where each key
+	 * is a VM id and the corresponding value is the id of the switch where the VM is connected to.
+	 */
+	public Map<Integer, Integer> VmToSwitchid;
 
-        /**
-         * A map between hosts and Switches, where each key
-         * is a host id and the corresponding value is the id of the switch where the host is connected to.
-         */
+	/**
+	 * A map between hosts and Switches, where each key
+	 * is a host id and the corresponding value is the id of the switch where the host is connected to.
+	 */
 	public Map<Integer, Integer> HostToSwitchid;
 
-        /**
-         * A map of datacenter switches where each key is a switch id
-         * and the corresponding value is the switch itself.
-         */
-	public Map<Integer, Switch> Switchlist;
+	/**
+	 * A map of datacenter switches where each key is a switch id
+	 * and the corresponding value is the switch itself.
+	 */
+	private final Map<Integer, Switch> SwitchList;
 
-        /**
-         * A map between VMs and Hosts, where each key
-         * is a VM id and the corresponding value is the id of the host where the VM is placed.
-         */
+	/**
+	 * A map between VMs and Hosts, where each key
+	 * is a VM id and the corresponding value is the id of the host where the VM is placed.
+	 */
 	public Map<Integer, Integer> VmtoHostlist;
+
+	/** Total data transmitted through the network of this datacenter (in bytes) */
+	public double totalDataTransfer = 0;
 
 	/**
 	 * Instantiates a new NetworkDatacenter object.
@@ -102,10 +99,42 @@ public class NetworkDatacenter extends Datacenter {
 			List<Storage> storageList,
 			double schedulingInterval) throws Exception {
 		super(name, characteristics, vmAllocationPolicy, storageList, schedulingInterval);
-		VmToSwitchid = new HashMap<Integer, Integer>();
-		HostToSwitchid = new HashMap<Integer, Integer>();
-		VmtoHostlist = new HashMap<Integer, Integer>();
-		Switchlist = new HashMap<Integer, Switch>();
+		VmToSwitchid = new HashMap<>();
+		HostToSwitchid = new HashMap<>();
+		VmtoHostlist = new HashMap<>();
+		SwitchList = new HashMap<>();
+	}
+
+	public Map<Integer, Switch> getSwitchList() { return SwitchList; }
+
+	@Override
+	protected void processVmCreate(SimEvent ev, boolean ack) {
+		super.processVmCreate(ev, ack);
+		GuestEntity guest = (GuestEntity) ev.getData();
+		HostEntity host = guest.getHost();
+
+		if (host != null) {
+			// very ugly, but no other way to support nested virtualization with the current network routing logic
+			while (host instanceof VirtualEntity vm) {
+				host = vm.getHost();
+			}
+
+			VmToSwitchid.put(guest.getId(), ((NetworkedEntity) host).getSwitch().getId());
+			VmtoHostlist.put(guest.getId(), host.getId());
+		}
+	}
+
+	@Override
+	protected void processCloudletSubmit(SimEvent ev, boolean ack) {
+		super.processCloudletSubmit(ev, ack);
+
+		NetworkCloudlet ncl = (NetworkCloudlet) ev.getData();
+
+		int userId = ncl.getUserId();
+		int vmId = ncl.getGuestId();
+		NetworkedEntity host = (NetworkedEntity) getVmAllocationPolicy().getHost(vmId, userId);
+
+		host.getNics().put(ncl.getCloudletId(), ncl.getNic());
 	}
 
 	/**
@@ -116,9 +145,9 @@ public class NetworkDatacenter extends Datacenter {
          * and each value it the switch itself.
 	 */
 	public Map<Integer, Switch> getEdgeSwitch() {
-		Map<Integer, Switch> edgeswitch = new HashMap<Integer, Switch>();
-		for (Entry<Integer, Switch> es : Switchlist.entrySet()) {
-			if (es.getValue().level == NetworkConstants.EDGE_LEVEL) {
+		Map<Integer, Switch> edgeswitch = new HashMap<>();
+		for (Entry<Integer, Switch> es : SwitchList.entrySet()) {
+			if (es.getValue().level == Switch.SwitchLevel.EDGE_LEVEL) {
 				edgeswitch.put(es.getKey(), es.getValue());
 			}
 		}
@@ -126,110 +155,61 @@ public class NetworkDatacenter extends Datacenter {
 
 	}
 
-	/**
-	 * Creates the given VM within the NetworkDatacenter. 
-         * It can be directly accessed by Datacenter Broker which manages allocation of Cloudlets.
-	 * 
-         * @param vm
-         * @return true if the VW was created successfully, false otherwise
-	 */
-	public boolean processVmCreateNetwork(Vm vm) {
-
-		boolean result = getVmAllocationPolicy().allocateHostForVm(vm);
-
-		if (result) {
-			VmToSwitchid.put(vm.getId(), ((NetworkHost) vm.getHost()).sw.getId());
-			VmtoHostlist.put(vm.getId(), vm.getHost().getId());
-			System.out.println(vm.getId() + " VM is created on " + vm.getHost().getId());
-
-			getVmList().add(vm);
-
-			vm.updateVmProcessing(CloudSim.clock(), getVmAllocationPolicy().getHost(vm).getVmScheduler()
-					.getAllocatedMipsForVm(vm));
+	public void registerSwitch(Switch sw) {
+		if (!getSwitchList().containsKey(sw.getId())) {
+			getSwitchList().put(sw.getId(), sw);
 		}
-		return result;
 	}
 
-	@Override
-	protected void processCloudletSubmit(SimEvent ev, boolean ack) {
-		updateCloudletProcessing();
-
-		try {
-			// gets the Cloudlet object
-			Cloudlet cl = (Cloudlet) ev.getData();
-
-			// checks whether this Cloudlet has finished or not
-			if (cl.isFinished()) {
-				String name = CloudSim.getEntityName(cl.getUserId());
-				Log.printConcatLine(getName(), ": Warning - Cloudlet #", cl.getCloudletId(), " owned by ", name,
-						" is already completed/finished.");
-				Log.printLine("Therefore, it is not being executed again");
-				Log.printLine();
-
-				// NOTE: If a Cloudlet has finished, then it won't be processed.
-				// So, if ack is required, this method sends back a result.
-				// If ack is not required, this method don't send back a result.
-				// Hence, this might cause CloudSim to be hanged since waiting
-				// for this Cloudlet back.
-				if (ack) {
-					int[] data = new int[3];
-					data[0] = getId();
-					data[1] = cl.getCloudletId();
-					data[2] = CloudSimTags.FALSE;
-
-					// unique tag = operation tag
-					int tag = CloudSimTags.CLOUDLET_SUBMIT_ACK;
-					sendNow(cl.getUserId(), tag, data);
-				}
-
-				sendNow(cl.getUserId(), CloudSimTags.CLOUDLET_RETURN, cl);
-
-				return;
-			}
-
-			// process this Cloudlet to this CloudResource
-			cl.setResourceParameter(getId(), getCharacteristics().getCostPerSecond(), getCharacteristics()
-					.getCostPerBw());
-
-			int userId = cl.getUserId();
-			int vmId = cl.getVmId();
-
-			// time to transfer the files
-			double fileTransferTime = predictFileTransferTime(cl.getRequiredFiles());
-
-			Host host = getVmAllocationPolicy().getHost(vmId, userId);
-			Vm vm = host.getVm(vmId, userId);
-			CloudletScheduler scheduler = vm.getCloudletScheduler();
-			double estimatedFinishTime = scheduler.cloudletSubmit(cl, fileTransferTime);
-
-			if (estimatedFinishTime > 0.0) { // if this cloudlet is in the exec
-				// time to process the cloudlet
-				estimatedFinishTime += fileTransferTime;
-				send(getId(), estimatedFinishTime, CloudSimTags.VM_DATACENTER_EVENT);
-
-				// event to update the stages
-				send(getId(), 0.0001, CloudSimTags.VM_DATACENTER_EVENT);
-			}
-
-			if (ack) {
-				int[] data = new int[3];
-				data[0] = getId();
-				data[1] = cl.getCloudletId();
-				data[2] = CloudSimTags.TRUE;
-
-				// unique tag = operation tag
-				int tag = CloudSimTags.CLOUDLET_SUBMIT_ACK;
-				sendNow(cl.getUserId(), tag, data);
-			}
-		} catch (ClassCastException c) {
-			Log.printLine(getName() + ".processCloudletSubmit(): " + "ClassCastException error.");
-			c.printStackTrace();
-		} catch (Exception e) {
-			Log.printLine(getName() + ".processCloudletSubmit(): " + "Exception error.");
-			e.printStackTrace();
+	public void attachSwitchToHost(Switch sw, NetworkHost netHost) {
+		if (!getSwitchList().containsKey(sw.getId()) || !getHostList().contains(netHost)) {
+			throw new IllegalArgumentException("Switch or Host are not part of this Datacenter");
 		}
 
-		checkCloudletCompletion();
+		if (sw.level != Switch.SwitchLevel.EDGE_LEVEL) {
+			throw new IllegalArgumentException("Switch is not at the edge level");
+		}
+
+		sw.hostList.put(netHost.getId(), netHost);
+		sendNow(sw.getId(), CloudActionTags.NETWORK_ATTACH_HOST, netHost);
+		HostToSwitchid.put(netHost.getId(), sw.getId());
+		netHost.setSwitch(sw);
 	}
 
+	public void attachSwitchToSwitch(Switch sw1, Switch sw2) {
+		if (!getSwitchList().containsKey(sw1.getId()) || !getSwitchList().containsKey(sw2.getId())) {
+			throw new IllegalArgumentException("One or both switches are not part of this Datacenter");
+		}
+
+		// Switches are already connected
+		if (sw1.downlinkSwitches.contains(sw2) || sw1.uplinkSwitches.contains(sw2)) {
+			return;
+		}
+
+		if (sw1.level == Switch.SwitchLevel.EDGE_LEVEL) {
+			if (sw2.level != Switch.SwitchLevel.AGGR_LEVEL) {
+				throw new IllegalArgumentException("Edge switch can only be attached to Aggregate switch");
+			} else {
+				sw1.uplinkSwitches.add(sw2);
+				sw2.downlinkSwitches.add(sw1);
+			}
+		} else if (sw1.level == Switch.SwitchLevel.AGGR_LEVEL) {
+			if (sw2.level == Switch.SwitchLevel.ROOT_LEVEL) {
+				sw1.uplinkSwitches.add(sw2);
+				sw2.downlinkSwitches.add(sw1);
+			} else if (sw2.level == Switch.SwitchLevel.EDGE_LEVEL) {
+				sw1.downlinkSwitches.add(sw2);
+				sw2.uplinkSwitches.add(sw1);
+			} else {
+				throw new IllegalArgumentException("Cannot attach to switch of same level");
+			}
+		} else { // root-level sw1
+			if (sw2.level != Switch.SwitchLevel.AGGR_LEVEL) {
+				throw new IllegalArgumentException("Root switch can only be attached to Aggregate switch");
+			} else {
+				sw1.downlinkSwitches.add(sw2);
+				sw2.uplinkSwitches.add(sw1);
+			}
+		}
+	}
 }

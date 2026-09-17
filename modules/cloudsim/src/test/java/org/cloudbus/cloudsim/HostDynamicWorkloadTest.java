@@ -8,8 +8,6 @@
 
 package org.cloudbus.cloudsim;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,11 +15,15 @@ import java.util.List;
 import org.cloudbus.cloudsim.provisioners.BwProvisionerSimple;
 import org.cloudbus.cloudsim.provisioners.PeProvisionerSimple;
 import org.cloudbus.cloudsim.provisioners.RamProvisionerSimple;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * @author		Anton Beloglazov
+ * @author 		Remo Andreoli
  * @since		CloudSim Toolkit 2.0
  */
 public class HostDynamicWorkloadTest {
@@ -35,9 +37,9 @@ public class HostDynamicWorkloadTest {
 	private HostDynamicWorkload host;
 	private List<Pe> peList;
 
-	@Before
+	@BeforeEach
 	public void setUp() throws Exception {
-		peList = new ArrayList<Pe>();
+		peList = new ArrayList<>();
 		peList.add(new Pe(0, new PeProvisionerSimple(MIPS)));
 		peList.add(new Pe(1, new PeProvisionerSimple(MIPS)));
 
@@ -76,22 +78,22 @@ public class HostDynamicWorkloadTest {
 		Vm vm0 = new Vm(0, 0, MIPS / 2, 1, 0, 0, 0, "", null);
 		Vm vm1 = new Vm(1, 0, MIPS / 2, 1, 0, 0, 0, "", null);
 
-		assertTrue(peList.get(0).getPeProvisioner().allocateMipsForVm(vm0, MIPS / 3));
-		assertTrue(peList.get(1).getPeProvisioner().allocateMipsForVm(vm1, MIPS / 5));
+		assertTrue(peList.get(0).getPeProvisioner().allocateMipsForGuest(vm0, MIPS / 3));
+		assertTrue(peList.get(1).getPeProvisioner().allocateMipsForGuest(vm1, MIPS / 5));
 
 		assertEquals((MIPS / 3) / MIPS, host.getMaxUtilization(), 0.001);
 	}
 
 	@Test
-	public void testGetMaxUtilizationAmongVmsPes() {
+	public void testGetMaxUtilizationAmongGuestsPes() {
 		Vm vm0 = new Vm(0, 0, MIPS / 2, 1, 0, 0, 0, "", null);
 		Vm vm1 = new Vm(1, 0, MIPS / 2, 1, 0, 0, 0, "", null);
 
-		assertTrue(peList.get(0).getPeProvisioner().allocateMipsForVm(vm0, MIPS / 3));
-		assertTrue(peList.get(1).getPeProvisioner().allocateMipsForVm(vm1, MIPS / 5));
+		assertTrue(peList.get(0).getPeProvisioner().allocateMipsForGuest(vm0, MIPS / 3));
+		assertTrue(peList.get(1).getPeProvisioner().allocateMipsForGuest(vm1, MIPS / 5));
 
-		assertEquals((MIPS / 3) / MIPS, host.getMaxUtilizationAmongVmsPes(vm0), 0.001);
-		assertEquals((MIPS / 5) / MIPS, host.getMaxUtilizationAmongVmsPes(vm1), 0.001);
+		assertEquals((MIPS / 3) / MIPS, host.getMaxUtilizationAmongGuestsPes(vm0), 0.001);
+		assertEquals((MIPS / 5) / MIPS, host.getMaxUtilizationAmongGuestsPes(vm1), 0.001);
 	}
 
 }

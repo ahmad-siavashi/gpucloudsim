@@ -1,23 +1,26 @@
+/*
+ * Title: CloudSim Toolkit Description: CloudSim (Cloud Simulation) Toolkit for Modeling and
+ * Simulation of Clouds Licence: GPL - http://www.gnu.org/copyleft/gpl.html
+ *
+ * Copyright (c) 2009-2024, The University of Melbourne, Australia
+ */
+
 package org.cloudbus.cloudsim.container.core;
 
-import org.cloudbus.cloudsim.Log;
-import org.cloudbus.cloudsim.Storage;
-import org.cloudbus.cloudsim.container.resourceAllocators.ContainerAllocationPolicy;
-import org.cloudbus.cloudsim.container.resourceAllocators.ContainerVmAllocationPolicy;
-import org.cloudbus.cloudsim.container.utils.CostumeCSVWriter;
-import org.cloudbus.cloudsim.core.CloudSim;
-import org.cloudbus.cloudsim.core.CloudSimTags;
-import org.cloudbus.cloudsim.core.SimEvent;
+import org.cloudbus.cloudsim.*;
+import org.cloudbus.cloudsim.VmAllocationPolicy.GuestMapping;
+import org.cloudbus.cloudsim.container.utils.CustomCSVWriter;
+import org.cloudbus.cloudsim.core.*;
 import org.cloudbus.cloudsim.core.predicates.PredicateType;
+import org.cloudbus.cloudsim.power.PowerHost;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Created by sareh on 3/08/15.
+ * Modified by Remo Andreoli (Feb 2024)
  */
 public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
     /**
@@ -25,59 +28,58 @@ public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
      */
     private boolean disableMigrations;
     public int containerMigrationCount;
-    private CostumeCSVWriter newlyCreatedVmWriter;
+    private CustomCSVWriter newlyCreatedVmWriter;
     private int newlyCreatedVms;
     private List<Integer> newlyCreatedVmsList;
-    private double vmStartupDelay;
-    private double containerStartupDelay;
+    private final double vmStartupDelay;
+    private final double containerStartupDelay;
 
 
-    public PowerContainerDatacenterCM(String name, ContainerDatacenterCharacteristics characteristics,
-                                      ContainerVmAllocationPolicy vmAllocationPolicy,
-                                      ContainerAllocationPolicy containerAllocationPolicy, List<Storage> storageList,
+    public PowerContainerDatacenterCM(String name, DatacenterCharacteristics characteristics,
+                                      VmAllocationPolicy vmAllocationPolicy,
+                                      VmAllocationPolicy containerAllocationPolicy, List<Storage> storageList,
                                       double schedulingInterval, String experimentName, String logAddress,
                                       double vmStartupDelay, double containerStartupDelay) throws Exception {
         super(name, characteristics, vmAllocationPolicy, containerAllocationPolicy, storageList, schedulingInterval, experimentName, logAddress);
         String newlyCreatedVmsAddress;
         int index = getExperimentName().lastIndexOf("_");
         newlyCreatedVmsAddress = String.format("%s/NewlyCreatedVms/%s/%s.csv", getLogAddress(), getExperimentName().substring(0, index), getExperimentName());
-        setNewlyCreatedVmWriter(new CostumeCSVWriter(newlyCreatedVmsAddress));
+        setNewlyCreatedVmWriter(new CustomCSVWriter(newlyCreatedVmsAddress));
         setNewlyCreatedVms(0);
         setDisableMigrations(false);
-        setNewlyCreatedVmsList(new ArrayList<Integer>());
+        setNewlyCreatedVmsList(new ArrayList<>());
         this.vmStartupDelay = vmStartupDelay;
         this.containerStartupDelay = containerStartupDelay;
     }
 
     @Override
     protected void updateCloudletProcessing() {
-
         //        Log.printLine("Power data center is Updating the cloudlet processing");
         if (getCloudletSubmitted() == -1 || getCloudletSubmitted() == CloudSim.clock()) {
-            CloudSim.cancelAll(getId(), new PredicateType(CloudSimTags.VM_DATACENTER_EVENT));
-            schedule(getId(), getSchedulingInterval(), CloudSimTags.VM_DATACENTER_EVENT);
+            CloudSim.cancelAll(getId(), new PredicateType(CloudActionTags.VM_DATACENTER_EVENT));
+            schedule(getId(), getSchedulingInterval(), CloudActionTags.VM_DATACENTER_EVENT);
             return;
         }
         double currentTime = CloudSim.clock();
 
         // if some time passed since last processing
         if (currentTime > getLastProcessTime()) {
-            System.out.print(currentTime + " ");
+            Log.print(currentTime + " ");
 
             double minTime = updateCloudetProcessingWithoutSchedulingFutureEventsForce();
 
             if (!isDisableMigrations()) {
-                List<Map<String, Object>> migrationMap = getVmAllocationPolicy().optimizeAllocation(
-                        getContainerVmList());
+                List<GuestMapping> migrationMap = getVmAllocationPolicy().optimizeAllocation(
+                        getVmList());
                 int previousContainerMigrationCount = getContainerMigrationCount();
                 int previousVmMigrationCount = getVmMigrationCount();
                 if (migrationMap != null) {
-                    List<ContainerVm> vmList = new ArrayList<ContainerVm>();
-                    for (Map<String, Object> migrate : migrationMap) {
-                        if (migrate.containsKey("container")) {
-                            Container container = (Container) migrate.get("container");
-                            ContainerVm targetVm = (ContainerVm) migrate.get("vm");
-                            ContainerVm oldVm = container.getVm();
+                    List<HostEntity> vmList = new ArrayList<>();
+                    for (GuestMapping migrate : migrationMap) {
+                        if (migrate.container() != null) {
+                            Container container = migrate.container();
+                            HostEntity targetVm = (HostEntity) migrate.vm();
+                            HostEntity oldVm = container.getHost();
                             if (oldVm == null) {
                                 Log.formatLine(
                                         "%.2f: Migration of Container #%d to Vm #%d is started",
@@ -93,10 +95,10 @@ public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
                                         targetVm.getId());
                             }
                             incrementContainerMigrationCount();
-                            targetVm.addMigratingInContainer(container);
+                            targetVm.addMigratingInGuest(container);
 
 
-                            if (migrate.containsKey("NewEventRequired")) {
+                            if (migrate.NewEventRequired()) {
                                 if (!vmList.contains(targetVm)) {
                                     // A new VM is created  send a vm create request with delay :)
 //                                Send a request to create Vm after 100 second
@@ -106,18 +108,18 @@ public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
                                             currentTime,
                                             container.getId(),
                                             targetVm.getId());
-                                    targetVm.containerDestroyAll();
+                                    targetVm.guestDestroyAll();
                                     send(
                                             getId(),
                                             vmStartupDelay,
-                                            CloudSimTags.VM_CREATE,
+                                            CloudActionTags.VM_CREATE,
                                             migrate);
                                     vmList.add(targetVm);
 
                                     send(
                                             getId(),
                                             containerStartupDelay + vmStartupDelay
-                                            , containerCloudSimTags.CONTAINER_MIGRATE,
+                                            , ContainerCloudSimTags.CONTAINER_MIGRATE,
                                             migrate);
 
                                 } else {
@@ -131,7 +133,7 @@ public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
                                     send(
                                             getId(),
                                             containerStartupDelay + vmStartupDelay
-                                            , containerCloudSimTags.CONTAINER_MIGRATE,
+                                            , ContainerCloudSimTags.CONTAINER_MIGRATE,
                                             migrate);
 
 
@@ -142,15 +144,15 @@ public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
                                 send(
                                         getId(),
                                         containerStartupDelay,
-                                        containerCloudSimTags.CONTAINER_MIGRATE,
+                                        ContainerCloudSimTags.CONTAINER_MIGRATE,
                                         migrate);
 
 
                             }
                         } else {
-                            ContainerVm vm = (ContainerVm) migrate.get("vm");
-                            PowerContainerHost targetHost = (PowerContainerHost) migrate.get("host");
-                            PowerContainerHost oldHost = (PowerContainerHost) vm.getHost();
+                            GuestEntity vm = migrate.vm();
+                            PowerHost targetHost = (PowerHost) migrate.host();
+                            PowerHost oldHost = vm.getHost();
 
                             if (oldHost == null) {
                                 Log.formatLine(
@@ -167,7 +169,7 @@ public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
                                         targetHost.getId());
                             }
 
-                            targetHost.addMigratingInContainerVm(vm);
+                            targetHost.addMigratingInGuest(vm);
                             incrementMigrationCount();
 
                             /** VM migration delay = RAM / bandwidth **/
@@ -177,7 +179,7 @@ public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
                             send(
                                     getId(),
                                     vm.getRam() / ((double) targetHost.getBw() / (2 * 8000)),
-                                    CloudSimTags.VM_MIGRATE,
+                                    CloudActionTags.VM_MIGRATE,
                                     migrate);
                         }
 
@@ -190,8 +192,8 @@ public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
                 }
                 getContainerMigrationList().add((double) (getContainerMigrationCount() - previousContainerMigrationCount));
 
-                Log.printConcatLine(CloudSim.clock(), ": The Number Container of Migrations is:  ", getContainerMigrationCount() - previousContainerMigrationCount);
-                Log.printConcatLine(CloudSim.clock(), ": The Number of VM Migrations is:  ", getVmMigrationCount() - previousVmMigrationCount);
+                Log.printlnConcat(CloudSim.clock(), ": The Number Container of Migrations is:  ", getContainerMigrationCount() - previousContainerMigrationCount);
+                Log.printlnConcat(CloudSim.clock(), ": The Number of VM Migrations is:  ", getVmMigrationCount() - previousVmMigrationCount);
                 String[] vmMig = {Double.toString(CloudSim.clock()), Integer.toString(getVmMigrationCount() - previousVmMigrationCount)};                   // <--declared statement
                 String[] msg = {Double.toString(CloudSim.clock()), Integer.toString(getContainerMigrationCount() - previousContainerMigrationCount)};                   // <--declared statement
                 try {
@@ -219,8 +221,8 @@ public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
 
             // schedules an event to the next time
             if (minTime != Double.MAX_VALUE) {
-                CloudSim.cancelAll(getId(), new PredicateType(CloudSimTags.VM_DATACENTER_EVENT));
-                send(getId(), getSchedulingInterval(), CloudSimTags.VM_DATACENTER_EVENT);
+                CloudSim.cancelAll(getId(), new PredicateType(CloudActionTags.VM_DATACENTER_EVENT));
+                send(getId(), getSchedulingInterval(), CloudActionTags.VM_DATACENTER_EVENT);
             }
 
             setLastProcessTime(currentTime);
@@ -233,41 +235,28 @@ public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
     protected void processVmCreate(SimEvent ev, boolean ack) {
 
 //    here we override the method
-        if (ev.getData() instanceof Map) {
-            Map<String, Object> map = (Map<String, Object>) ev.getData();
-            ContainerVm containerVm = (ContainerVm) map.get("vm");
-            ContainerHost host = (ContainerHost) map.get("host");
-            boolean result = getVmAllocationPolicy().allocateHostForVm(containerVm, host);
+        if (ev.getData() instanceof GuestMapping map) {
+            VirtualEntity containerVm = (Vm) map.vm();
+            HostEntity host = map.host();
+            boolean result = getVmAllocationPolicy().allocateHostForGuest(containerVm, host);
 //                set the containerVm in waiting state
             containerVm.setInWaiting(true);
-//                containerVm.addMigratingInContainer((Container) map.get("container"));
-            ack = true;
-            if (ack) {
-                Map<String, Object> data = new HashMap<String, Object>();
-                data.put("vm", containerVm);
-                data.put("result", containerVm);
-                data.put("datacenterID", getId());
-
-                if (result) {
-                    data.put("result", CloudSimTags.TRUE);
-                } else {
-                    data.put("result", CloudSimTags.FALSE);
-                }
-                send(2, CloudSim.getMinTimeBetweenEvents(), containerCloudSimTags.VM_NEW_CREATE, data);
-            }
+//                containerVm.addMigratingInContainer((Container) map.container());
 
             if (result) {
-                Log.printLine(String.format("%s VM ID #%d is created on Host #%d", CloudSim.clock(), containerVm.getId(), host.getId()));
+                GuestMapping data = new GuestMapping(containerVm, null, null, getId(), false, false);
+                send(2, CloudSim.getMinTimeBetweenEvents(), ContainerCloudSimTags.VM_NEW_CREATE, data);
+                Log.println(String.format("%s VM ID #%d is created on Host #%d", CloudSim.clock(), containerVm.getId(), host.getId()));
                 incrementNewlyCreatedVmsCount();
-                getContainerVmList().add(containerVm);
+                getVmList().add(containerVm);
 
 
                 if (containerVm.isBeingInstantiated()) {
                     containerVm.setBeingInstantiated(false);
                 }
 
-                containerVm.updateVmProcessing(CloudSim.clock(), getVmAllocationPolicy().getHost(containerVm).getContainerVmScheduler()
-                        .getAllocatedMipsForContainerVm(containerVm));
+                containerVm.updateCloudletsProcessing(CloudSim.clock(), getVmAllocationPolicy().getHost(containerVm).getGuestScheduler()
+                        .getAllocatedMipsForGuest(containerVm));
             }
 
         } else {
@@ -317,11 +306,11 @@ public class PowerContainerDatacenterCM extends PowerContainerDatacenter {
         this.containerMigrationCount = containerMigrationCount;
     }
 
-    public CostumeCSVWriter getNewlyCreatedVmWriter() {
+    public CustomCSVWriter getNewlyCreatedVmWriter() {
         return newlyCreatedVmWriter;
     }
 
-    public void setNewlyCreatedVmWriter(CostumeCSVWriter newlyCreatedVmWriter) {
+    public void setNewlyCreatedVmWriter(CustomCSVWriter newlyCreatedVmWriter) {
         this.newlyCreatedVmWriter = newlyCreatedVmWriter;
     }
 

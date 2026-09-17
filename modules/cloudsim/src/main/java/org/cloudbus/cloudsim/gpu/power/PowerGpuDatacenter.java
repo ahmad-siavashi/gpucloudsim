@@ -48,7 +48,7 @@ public class PowerGpuDatacenter extends GpuDatacenter {
 		setHostEnergyMap(new HashMap<PowerGpuHost, Double>());
 		setHostCpuEnergyMap(new HashMap<PowerGpuHost, Double>());
 		setHostVideoCardEnergyMap(new HashMap<PowerGpuHost, Map<PowerVideoCard, Double>>());
-		for (Host host : getCharacteristics().getHostList()) {
+		for (Host host : getCharacteristics().<Host>getHostList()) {
 			PowerGpuHost powerGpuHost = (PowerGpuHost) host;
 			getHostEnergyMap().put(powerGpuHost, 0.0);
 			getHostCpuEnergyMap().put(powerGpuHost, 0.0);
@@ -65,7 +65,7 @@ public class PowerGpuDatacenter extends GpuDatacenter {
 
 	@SuppressWarnings("unchecked")
 	protected void updatePower(double deltaTime) {
-		for (Host host : getHostList()) {
+		for (Host host : this.<Host>getHostList()) {
 			PowerGpuHost powerGpuHost = (PowerGpuHost) host;
 			if (isPowerSavingMode() && powerGpuHost.isIdle()) {
 				// Assume unused machines are powered off
@@ -100,11 +100,9 @@ public class PowerGpuDatacenter extends GpuDatacenter {
 	@Override
 	protected void processOtherEvent(SimEvent ev) {
 		super.processOtherEvent(ev);
-		switch (ev.getTag()) {
-		case GpuCloudSimTags.GPU_VM_DATACENTER_POWER_EVENT:
+		if (ev.getTag() == GpuCloudSimTags.GPU_VM_DATACENTER_POWER_EVENT) {
 			updatePower(getSchedulingInterval());
 			schedule(getId(), getSchedulingInterval(), GpuCloudSimTags.GPU_VM_DATACENTER_POWER_EVENT);
-			break;
 		}
 	}
 

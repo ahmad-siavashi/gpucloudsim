@@ -11,11 +11,14 @@ package org.cloudbus.cloudsim.lists;
 import java.util.List;
 
 import org.cloudbus.cloudsim.Vm;
+import org.cloudbus.cloudsim.core.CloudSim;
+import org.cloudbus.cloudsim.core.GuestEntity;
 
 /**
  * VmList is a collection of operations on lists of VMs.
  * 
  * @author Anton Beloglazov
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 2.0
  */
 public class VmList {
@@ -29,7 +32,7 @@ public class VmList {
 	 * @pre $none
 	 * @post $none
          * 
-         * @todo It may be considered the use of a HashMap in order to improve 
+         * //@TODO It may be considered the use of a HashMap in order to improve
          * VM search, instead of a List. The map key can be the vm id
          * and the value the VM itself. However, it has to be assessed
          * the feasibility to have VMs with the same ID and the need
@@ -46,7 +49,7 @@ public class VmList {
          * effect on the entire project and in the creation of simulations
          * that has to be priorly assessed.
 	 */
-	public static <T extends Vm> T getById(List<T> vmList, int id) {
+	public static <T extends GuestEntity> T getById(List<T> vmList, int id) {
 		for (T vm : vmList) {
 			if (vm.getId() == id) {
 				return vm;
@@ -65,7 +68,7 @@ public class VmList {
 	 * @pre $none
 	 * @post $none
 	 */
-	public static <T extends Vm> T getByIdAndUserId(List<T> vmList, int id, int userId) {
+	public static <T extends GuestEntity> T getByIdAndUserId(List<T> vmList, int id, int userId) {
 		for (T vm : vmList) {
 			if (vm.getId() == id && vm.getUserId() == userId) {
 				return vm;
@@ -74,4 +77,16 @@ public class VmList {
 		return null;
 	}
 
+	/**
+	 * Sort a given list of VMs by cpu utilization.
+	 *
+	 * @param vmList the vm list to be sorted
+	 */
+	public static <T extends GuestEntity> void sortByCpuUtilization(List<T> vmList) {
+		vmList.sort((a, b) -> {
+			Double aUtilization = a.getTotalUtilizationOfCpuMips(CloudSim.clock());
+			Double bUtilization = b.getTotalUtilizationOfCpuMips(CloudSim.clock());
+			return bUtilization.compareTo(aUtilization);
+		});
+	}
 }

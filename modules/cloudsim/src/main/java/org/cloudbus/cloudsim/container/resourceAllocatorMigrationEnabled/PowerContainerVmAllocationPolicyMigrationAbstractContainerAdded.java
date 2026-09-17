@@ -1,20 +1,27 @@
+/*
+ * Title: CloudSim Toolkit Description: CloudSim (Cloud Simulation) Toolkit for Modeling and
+ * Simulation of Clouds Licence: GPL - http://www.gnu.org/copyleft/gpl.html
+ *
+ * Copyright (c) 2009-2024, The University of Melbourne, Australia
+ */
+
 package org.cloudbus.cloudsim.container.resourceAllocatorMigrationEnabled;
 
-import org.cloudbus.cloudsim.container.containerProvisioners.ContainerBwProvisionerSimple;
-import org.cloudbus.cloudsim.container.containerProvisioners.ContainerPe;
-import org.cloudbus.cloudsim.container.containerProvisioners.ContainerRamProvisionerSimple;
-import org.cloudbus.cloudsim.container.containerProvisioners.CotainerPeProvisionerSimple;
-import org.cloudbus.cloudsim.container.containerSelectionPolicies.PowerContainerSelectionPolicy;
+import org.cloudbus.cloudsim.*;
 import org.cloudbus.cloudsim.container.core.*;
-import org.cloudbus.cloudsim.container.core.ContainerHostList;
-import org.cloudbus.cloudsim.container.lists.*;
-import org.cloudbus.cloudsim.container.resourceAllocators.PowerContainerAllocationPolicy;
-import org.cloudbus.cloudsim.container.schedulers.ContainerSchedulerTimeSharedOverSubscription;
 import org.cloudbus.cloudsim.container.utils.IDs;
 import org.cloudbus.cloudsim.container.utils.RandomGen;
-import org.cloudbus.cloudsim.container.vmSelectionPolicies.PowerContainerVmSelectionPolicy;
-import org.cloudbus.cloudsim.Log;
 import org.cloudbus.cloudsim.core.CloudSim;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.core.HostEntity;
+import org.cloudbus.cloudsim.core.PowerGuestEntity;
+import org.cloudbus.cloudsim.lists.HostList;
+import org.cloudbus.cloudsim.lists.VmList;
+import org.cloudbus.cloudsim.power.PowerHost;
+import org.cloudbus.cloudsim.provisioners.BwProvisionerSimple;
+import org.cloudbus.cloudsim.provisioners.PeProvisionerSimple;
+import org.cloudbus.cloudsim.provisioners.RamProvisionerSimple;
+import org.cloudbus.cloudsim.selectionPolicies.SelectionPolicy;
 import org.cloudbus.cloudsim.util.ExecutionTimeMeasurer;
 
 import java.util.*;
@@ -22,6 +29,7 @@ import java.util.*;
 
 /**
  * Created by sareh on 30/07/15.
+ * Modified by Remo Andreoli (Feb 2024)
  */
 
 public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainerAdded extends PowerContainerVmAllocationPolicyMigrationAbstract {
@@ -30,17 +38,17 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
     /**
      * The container selection policy.
      */
-    private PowerContainerSelectionPolicy containerSelectionPolicy;
+    private SelectionPolicy<PowerGuestEntity> containerSelectionPolicy;
     protected int numberOfVmTypes;
     protected int[] vmPes;
-    protected float[] vmRam;
+    protected int[] vmRam;
     protected long vmBw;
     protected long vmSize;
     protected double[] vmMips;
 
-    public PowerContainerVmAllocationPolicyMigrationAbstractContainerAdded(List<? extends ContainerHost> hostList,
-    		PowerContainerVmSelectionPolicy vmSelectionPolicy, PowerContainerSelectionPolicy containerSelectionPolicy,
-    		int numberOfVmTypes, int[] vmPes, float[] vmRam, long vmBw, long vmSize, double[] vmMips) {
+    public PowerContainerVmAllocationPolicyMigrationAbstractContainerAdded(List<? extends HostEntity> hostList,
+                                                                           SelectionPolicy<GuestEntity> vmSelectionPolicy, SelectionPolicy<PowerGuestEntity> containerSelectionPolicy,
+                                                                           int numberOfVmTypes, int[] vmPes, int[] vmRam, long vmBw, long vmSize, double[] vmMips) {
         super(hostList, vmSelectionPolicy);
 //        setDatacenter(datacenter);
         setContainerSelectionPolicy(containerSelectionPolicy);
@@ -54,12 +62,12 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
     }
 
     @Override
-    public List<Map<String, Object>> optimizeAllocation(List<? extends ContainerVm> vmList) {
+    public List<GuestMapping> optimizeAllocation(List<? extends GuestEntity> vmList) {
 
         ExecutionTimeMeasurer.start("optimizeAllocationTotal");
 
         ExecutionTimeMeasurer.start("optimizeAllocationHostSelection");
-        List<PowerContainerHostUtilizationHistory> overUtilizedHosts = getOverUtilizedHosts();
+        List<PowerHost> overUtilizedHosts = getOverUtilizedHosts();
         getExecutionTimeHistoryHostSelection().add(
                 ExecutionTimeMeasurer.end("optimizeAllocationHostSelection"));
 
@@ -68,17 +76,17 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
         saveAllocation();
 
         ExecutionTimeMeasurer.start("optimizeAllocationContainerSelection");
-        List<? extends Container> containersToMigrate = getContainersToMigrateFromHosts(overUtilizedHosts);
+        List<? extends GuestEntity> containersToMigrate = getContainersToMigrateFromHosts(overUtilizedHosts);
         getExecutionTimeHistoryVmSelection().add(ExecutionTimeMeasurer.end("optimizeAllocationContainerSelection"));
 
-        Log.printLine("Reallocation of Containers from the over-utilized hosts:");
+        Log.println("Reallocation of Containers from the over-utilized hosts:");
         ExecutionTimeMeasurer.start("optimizeAllocationVmReallocation");
-        List<Map<String, Object>> migrationMap = getPlacementForLeftContainers(containersToMigrate, new HashSet<ContainerHost>(overUtilizedHosts));
+        List<GuestMapping> migrationMap = getPlacementForLeftContainers(containersToMigrate, new HashSet<Host>(overUtilizedHosts));
 
 
         getExecutionTimeHistoryVmReallocation().add(
                 ExecutionTimeMeasurer.end("optimizeAllocationVmReallocation"));
-        Log.printLine();
+        Log.println();
 
         migrationMap.addAll(getContainerMigrationMapFromUnderUtilizedHosts(overUtilizedHosts, migrationMap));
 
@@ -91,35 +99,34 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
 
     }
 
-    protected Collection<? extends Map<String, Object>> getContainerMigrationMapFromUnderUtilizedHosts(List<PowerContainerHostUtilizationHistory> overUtilizedHosts, List<Map<String, Object>> previouseMap) {
-
-        List<Map<String, Object>> migrationMap = new LinkedList<Map<String, Object>>();
-        List<PowerContainerHost> switchedOffHosts = getSwitchedOffHosts();
+    protected Collection<? extends GuestMapping> getContainerMigrationMapFromUnderUtilizedHosts(List<PowerHost> overUtilizedHosts, List<GuestMapping> previouseMap) {
+        List<GuestMapping> migrationMap = new LinkedList<>();
+        List<PowerHost> switchedOffHosts = getSwitchedOffHosts();
 
         // over-utilized hosts + hosts that are selected to migrate VMs to from over-utilized hosts
-        Set<PowerContainerHost> excludedHostsForFindingUnderUtilizedHost = new HashSet<>();
+        Set<PowerHost> excludedHostsForFindingUnderUtilizedHost = new HashSet<>();
         excludedHostsForFindingUnderUtilizedHost.addAll(overUtilizedHosts);
         excludedHostsForFindingUnderUtilizedHost.addAll(switchedOffHosts);
         excludedHostsForFindingUnderUtilizedHost.addAll(extractHostListFromMigrationMap(previouseMap));
 
         // over-utilized + under-utilized hosts
-        Set<PowerContainerHost> excludedHostsForFindingNewContainerPlacement = new HashSet<PowerContainerHost>();
+        Set<PowerHost> excludedHostsForFindingNewContainerPlacement = new HashSet<>();
         excludedHostsForFindingNewContainerPlacement.addAll(overUtilizedHosts);
         excludedHostsForFindingNewContainerPlacement.addAll(switchedOffHosts);
 
-        int numberOfHosts = getContainerHostList().size();
+        int numberOfHosts = getHostList().size();
 
         while (true) {
             if (numberOfHosts == excludedHostsForFindingUnderUtilizedHost.size()) {
                 break;
             }
 
-            PowerContainerHost underUtilizedHost = getUnderUtilizedHost(excludedHostsForFindingUnderUtilizedHost);
+            PowerHost underUtilizedHost = getUnderUtilizedHost(excludedHostsForFindingUnderUtilizedHost);
             if (underUtilizedHost == null) {
                 break;
             }
 
-            Log.printConcatLine("Under-utilized host: host #", underUtilizedHost.getId(), "\n");
+            Log.printlnConcat("Under-utilized host: host #", underUtilizedHost.getId(), "\n");
 
             excludedHostsForFindingUnderUtilizedHost.add(underUtilizedHost);
             excludedHostsForFindingNewContainerPlacement.add(underUtilizedHost);
@@ -135,9 +142,9 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
                     Log.print(vm.getId() + " ");
                 }
             }
-            Log.printLine();
+            Log.println();
 
-            List<Map<String, Object>> newVmPlacement = getNewVmPlacementFromUnderUtilizedHost(
+            List<GuestMapping> newVmPlacement = getNewVmPlacementFromUnderUtilizedHost(
                     vmsToMigrateFromUnderUtilizedHost,
                     excludedHostsForFindingNewContainerPlacement);
             //Sareh
@@ -150,7 +157,7 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
             excludedHostsForFindingUnderUtilizedHost.addAll(extractHostListFromMigrationMap(newVmPlacement));
             //The migration mapp does not have a value for container since the whole vm would be migrated.
             migrationMap.addAll(newVmPlacement);
-            Log.printLine();
+            Log.println();
         }
 
         excludedHostsForFindingUnderUtilizedHost.clear();
@@ -158,16 +165,16 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
         return migrationMap;
     }
 
-    private List<? extends Container> getContainersToMigrateFromHosts(List<PowerContainerHostUtilizationHistory> overUtilizedHosts) {
-        List<Container> containersToMigrate = new LinkedList<>();
-        for (PowerContainerHostUtilizationHistory host : overUtilizedHosts) {
+    private List<? extends GuestEntity> getContainersToMigrateFromHosts(List<PowerHost> overUtilizedHosts) {
+        List<GuestEntity> containersToMigrate = new LinkedList<>();
+        for (PowerHost host : overUtilizedHosts) {
             while (true) {
-                Container container = getContainerSelectionPolicy().getContainerToMigrate(host);
+                GuestEntity container = getContainerSelectionPolicy().select(host.getMigrableContainers(), host, Set.of());
                 if (container == null) {
                     break;
                 }
                 containersToMigrate.add(container);
-                container.getVm().containerDestroy(container);
+                container.getHost().guestDestroy(container);
                 if (!isHostOverUtilized(host)) {
                     break;
                 }
@@ -177,73 +184,62 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
     }
 
 
-    private List<Map<String, Object>> getNewContainerPlacement(List<? extends Container> containersToMigrate, Set<? extends ContainerHost> excludedHosts) {
+    private List<GuestMapping> getNewContainerPlacement(List<? extends GuestEntity> containersToMigrate, Set<? extends Host> excludedHosts) {
+        List<GuestMapping> migrationMap = new LinkedList<>();
 
-        List<Map<String, Object>> migrationMap = new LinkedList<Map<String, Object>>();
+        VmList.sortByCpuUtilization(containersToMigrate);
+        for (GuestEntity container : containersToMigrate) {
+            GuestMapping allocationMap = findHostForGuest(container, excludedHosts, false);
 
-        PowerContainerList.sortByCpuUtilization(containersToMigrate);
-        for (Container container : containersToMigrate) {
-            Map<String, Object> allocationMap = findHostForContainer(container, excludedHosts, false);
-
-            if (allocationMap.get("host") != null && allocationMap.get("vm") != null) {
-                ContainerVm vm = (ContainerVm) allocationMap.get("vm");
-                Log.printConcatLine("Container #", container.getId(), " allocated to host #", ((PowerContainerHost) allocationMap.get("host")).getId(), "The VM ID is #", vm.getId());
-                Map<String, Object> migrate = new HashMap<String, Object>();
-                migrate.put("container", container);
-                migrate.put("vm", vm);
-                migrate.put("host", (PowerContainerHost) allocationMap.get("host"));
-                migrationMap.add(migrate);
+            if (allocationMap != null && allocationMap.host() != null && allocationMap.vm() != null) {
+                ContainerVm vm = (ContainerVm) allocationMap.vm();
+                Log.printlnConcat("Container #", container.getId(), " allocated to host #", (allocationMap.host()).getId(), "The VM ID is #", vm.getId());
+                migrationMap.add(new GuestMapping(vm, allocationMap.host(), (Container)container));
             } else {
-                Map<String, Object> migrate = new HashMap<String, Object>();
-                migrate.put("NewVmRequired", container);
-                migrationMap.add(migrate);
-
+                migrationMap.add(new GuestMapping(null, null, null, 0, false, true));
             }
-
         }
         containersToMigrate.clear();
         return migrationMap;
     }
 
-    private List<Map<String, Object>> getPlacementForLeftContainers(List<? extends Container> containersToMigrate, Set<? extends ContainerHost> excludedHostsList) {
-        List<Map<String, Object>> newMigrationMap = new LinkedList<Map<String, Object>>();
+    private List<GuestMapping> getPlacementForLeftContainers(List<? extends GuestEntity> containersToMigrate, Set<? extends Host> excludedHostsList) {
+        List<GuestMapping> newMigrationMap = new LinkedList<>();
 
-        if (containersToMigrate.size() == 0) {
+        if (containersToMigrate.isEmpty()) {
             return newMigrationMap;
         }
-        HashSet<ContainerHost> excludedHostsforOverUtilized = new HashSet<>();
+        HashSet<Host> excludedHostsforOverUtilized = new HashSet<>();
         excludedHostsforOverUtilized.addAll(getSwitchedOffHosts());
         excludedHostsforOverUtilized.addAll(excludedHostsList);
-        List<Map<String, Object>> migrationMap = getNewContainerPlacement(containersToMigrate, excludedHostsforOverUtilized);
-        if (migrationMap.size() == 0) {
+        List<GuestMapping> migrationMap = getNewContainerPlacement(containersToMigrate, excludedHostsforOverUtilized);
+        if (migrationMap.isEmpty()) {
             return migrationMap;
         }
 //        List<Container> containerList = getExtraContainers(migrationMap);
 
 
         List<Container> containerList = new ArrayList<>();
-        for (Map<String, Object> map : migrationMap) {
-            if (map.containsKey("NewVmRequired")) {
-                containerList.add((Container) map.get("NewVmRequired"));
-
+        for (GuestMapping map : migrationMap) {
+            if (map.NewVmRequired()) {
+                containerList.add(map.container());
             } else {
                 newMigrationMap.add(map);
             }
 
         }
-        if (containerList.size() == 0) {
+        if (containerList.isEmpty()) {
             return newMigrationMap;
         }
 
-        List<ContainerHost> underUtilizedHostList = getUnderUtilizedHostList(excludedHostsList);
+        List<Host> underUtilizedHostList = getUnderUtilizedHostList(excludedHostsList);
 
-        List<Map<String, Object>> migrationMapUnderUtilized = findMapInUnderUtilizedHosts(underUtilizedHostList,containerList);
+        List<GuestMapping> migrationMapUnderUtilized = findMapInUnderUtilizedHosts(underUtilizedHostList,containerList);
         newMigrationMap.addAll(migrationMapUnderUtilized);
         containerList.removeAll(getAssignedContainers(migrationMapUnderUtilized));
-        if(containerList.size()!= 0){
-            List<Map<String, Object>> migrationMapSwitchedOff= findMapInSwitchedOffHosts(containerList);
+        if(!containerList.isEmpty()){
+            List<GuestMapping> migrationMapSwitchedOff = findMapInSwitchedOffHosts(containerList);
             newMigrationMap.addAll(migrationMapSwitchedOff);
-
         }
 
 
@@ -253,44 +249,34 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
 
         return newMigrationMap;
     }
-    protected List<Map<String, Object>> findMapInUnderUtilizedHosts(List<ContainerHost> underUtilizedHostList, List<Container> containerList){
-        List<Map<String, Object>> newMigrationMap = new ArrayList<>();
+    protected List<GuestMapping> findMapInUnderUtilizedHosts(List<Host> underUtilizedHostList, List<Container> containerList){
+        List<GuestMapping> newMigrationMap = new ArrayList<>();
         //        Create new Vms on underUtilized hosts;
-        List<Map<String, Object>> createdVmMap = new ArrayList<>();
-        if (underUtilizedHostList.size() != 0) {
-            for (ContainerHost host : underUtilizedHostList) {
+        List<GuestMapping> createdVmMap = new ArrayList<>();
+        if (!underUtilizedHostList.isEmpty()) {
+            for (Host host : underUtilizedHostList) {
 //                   We try to create the largest Vm possible
                 List<ContainerVm> VmList = createVms(host, true);
-                if(VmList.size() != 0){
-                    for(ContainerVm vm:VmList){
-                        Map<String, Object> map = new HashMap<>();
-                        map.put("host",host);
-                        map.put("vm",vm);
+                if(!VmList.isEmpty()) {
+                    for(ContainerVm vm:VmList) {
+                        GuestMapping map = new GuestMapping(vm, host);
                         createdVmMap.add(map);
-
-                    }}
+                    }
+                }
             }
-            if(createdVmMap.size() ==0){
-
+            if (createdVmMap.isEmpty()) {
                 return newMigrationMap;
-
             }
 
             //        if there are any new Vms on the underUtilized Hosts we assign the containers to them first!
             // Sort the underUtilized host by the utilization, so that we first assign vms to the more utilized ones
             for (Container container : containerList) {
-                Map<String, Object> allocationMap = findAvailableHostForContainer(container, createdVmMap);
-                if (allocationMap.get("host") != null && allocationMap.get("vm") != null) {
-                    ContainerVm vm = (ContainerVm) allocationMap.get("vm");
-                    Log.printConcatLine("Container #", container.getId(), " allocated to host #", ((PowerContainerHost) allocationMap.get("host")).getId(), "The VM ID is #", vm.getId());
-                    Map<String, Object> migrate = new HashMap<String, Object>();
-//                    vm.setInWaiting(true);
-                    migrate.put("NewEventRequired", container);
-                    migrate.put("container", container);
-                    migrate.put("vm", vm);
-                    migrate.put("host", (PowerContainerHost) allocationMap.get("host"));
-                    newMigrationMap.add(migrate);
-
+                GuestMapping allocationMap = findAvailableHostForContainer(container, createdVmMap);
+                if (allocationMap != null && allocationMap.host() != null && allocationMap.vm() != null) {
+                    ContainerVm vm = (ContainerVm) allocationMap.vm();
+                    Log.printlnConcat("Container #", container.getId(), " allocated to host #", (allocationMap.host()).getId(), "The VM ID is #", vm.getId());
+                    // vm.setInWaiting(true);
+                    newMigrationMap.add(new GuestMapping(vm, allocationMap.host(), container, true, false));
                 }
             }
         }
@@ -298,29 +284,26 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
       return newMigrationMap;
 
     }
-    protected List<Container> getAssignedContainers(List<Map<String, Object>> migrationMap){
+    protected List<Container> getAssignedContainers(List<GuestMapping> migrationMap) {
         List<Container> assignedContainers = new ArrayList<>();
-        for(Map<String, Object> map:migrationMap){
-            if(map.containsKey("container")){
-                assignedContainers.add((Container) map.get("container"));
+        for (GuestMapping map : migrationMap) {
+            if (map.container() != null) {
+                assignedContainers.add((Container) map.container());
             }
-
-
-
         }
-
-    return assignedContainers;
+        return assignedContainers;
     }
-    protected ContainerVm createVMinHost(ContainerHost host, boolean vmStatus) {
+
+    protected ContainerVm createVMinHost(Host host, boolean vmStatus) {
 
         for (int i=0; i<numberOfVmTypes; i++) {
             ContainerVm vm = getNewVm(i);
-            if (getUtilizationOfCpuMips((PowerContainerHost) host) != 0 && isHostOverUtilizedAfterAllocation((PowerContainerHost) host, vm)) {
+            if (getUtilizationOfCpuMips((PowerHost) host) != 0 && isHostOverUtilizedAfterAllocation((PowerHost) host, vm)) {
                 continue;
             }
             
-            if(allocateHostForVm(vm, host)){
-                Log.printLine("The vm ID #" + vm.getId() + "will be created ");
+            if(allocateHostForGuest(vm, host)){
+                Log.println("The vm ID #" + vm.getId() + "will be created ");
                 vm.setInWaiting(vmStatus);
                 return vm;
             }
@@ -329,20 +312,19 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
         return null;
     }
 
-    protected List<Map<String, Object>> findMapInSwitchedOffHosts(List<Container> containerList) {
+    protected List<GuestMapping> findMapInSwitchedOffHosts(List<Container> containerList) {
         Log.print(String.format(" %s :  Find Placement in the switched of hosts", CloudSim.clock()));
-        List<PowerContainerHost> switchedOffHostsList = getSwitchedOffHosts();
-        List<Map<String, Object>> newMigrationMap = new ArrayList<>();
+        List<PowerHost> switchedOffHostsList = getSwitchedOffHosts();
+        List<GuestMapping> newMigrationMap = new ArrayList<>();
 
-        if (containerList.size() == 0) {
-
+        if (containerList.isEmpty()) {
             return newMigrationMap;
         }
 
-        ContainerHost previouseHost = null;
+        Host previouseHost = null;
         ContainerVm previouseVm = null;
-        while (containerList.size() != 0) {
-            if (switchedOffHostsList.size() == 0) {
+        while (!containerList.isEmpty()) {
+            if (switchedOffHostsList.isEmpty()) {
 
                 Log.print("There is no hosts to create VMs");
                 break;
@@ -350,28 +332,22 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
             List<Container> assignedContainer = new ArrayList<>();
             //choose a random host
             if (previouseHost == null && previouseVm == null) {
-                if(switchedOffHostsList.size() ==0 ){
+                if(switchedOffHostsList.isEmpty()){
                     return newMigrationMap;
                 }
                 int hostIndex = new RandomGen().getNum(switchedOffHostsList.size());
                 previouseHost = switchedOffHostsList.get(hostIndex);
                 switchedOffHostsList.remove(previouseHost);
                 previouseVm = createVMinHost(previouseHost, true);
-                previouseHost.containerVmCreate(previouseVm);
+                previouseHost.guestCreate(previouseVm);
 
                 for (Container container : containerList) {
-                    if (previouseVm.isSuitableForContainer(container)) {
-                        previouseVm.containerCreate(container);
+                    if (previouseVm.isSuitableForGuest(container)) {
+                        previouseVm.guestCreate(container);
                         assignedContainer.add(container);
-                        Map<String, Object> migrate = new HashMap<String, Object>();
 //                        previouseVm.setInWaiting(true);
-                        migrate.put("NewEventRequired", container);
-                        migrate.put("container", container);
-                        migrate.put("vm", previouseVm);
-                        migrate.put("host", previouseHost);
-                        newMigrationMap.add(migrate);
+                        newMigrationMap.add(new GuestMapping(previouseVm, previouseHost, container, true, false));
                     } else {
-
                         previouseVm = createVMinHost(previouseHost, true);
                         if (previouseVm == null) {
                             switchedOffHostsList.remove(previouseHost);
@@ -379,16 +355,10 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
                             containerList.removeAll(assignedContainer);
                             break;
                         }
-                        previouseVm.containerCreate(container);
+                        previouseVm.guestCreate(container);
                         assignedContainer.add(container);
-                        Map<String, Object> migrate = new HashMap<String, Object>();
 //                        previouseVm.setInWaiting(true);
-                        migrate.put("NewEventRequired", container);
-                        migrate.put("container", container);
-                        migrate.put("vm", previouseVm);
-                        migrate.put("host", previouseHost);
-                        newMigrationMap.add(migrate);
-
+                        newMigrationMap.add(new GuestMapping(previouseVm, previouseHost, container, true, false));
                     }
                 }
 
@@ -396,18 +366,12 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
             } else {
 
                 for (Container container : containerList) {
-                    if (previouseVm.isSuitableForContainer(container)) {
-                        previouseVm.containerCreate(container);
+                    if (previouseVm.isSuitableForGuest(container)) {
+                        previouseVm.guestCreate(container);
                         assignedContainer.add(container);
-                        Map<String, Object> migrate = new HashMap<String, Object>();
 //                        previouseVm.setInWaiting(true);
-                        migrate.put("NewEventRequired", container);
-                        migrate.put("container", container);
-                        migrate.put("vm", previouseVm);
-                        migrate.put("host", previouseHost);
-                        newMigrationMap.add(migrate);
+                        newMigrationMap.add(new GuestMapping(previouseVm, previouseHost, container, true, false));
                     } else {
-
                         previouseVm = createVMinHost(previouseHost, true);
                         if (previouseVm == null) {
                             switchedOffHostsList.remove(previouseHost);
@@ -415,16 +379,10 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
                             containerList.removeAll(assignedContainer);
                             break;
                         }
-                        previouseVm.containerCreate(container);
+                        previouseVm.guestCreate(container);
                         assignedContainer.add(container);
-                        Map<String, Object> migrate = new HashMap<String, Object>();
 //                        previouseVm.setInWaiting(true);
-                        migrate.put("NewEventRequired", container);
-                        migrate.put("container", container);
-                        migrate.put("vm", previouseVm);
-                        migrate.put("host", previouseHost);
-                        newMigrationMap.add(migrate);
-
+                        newMigrationMap.add(new GuestMapping(previouseVm, previouseHost, container, true, false));
                     }
                 }
 
@@ -439,32 +397,29 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
     }
 
     //    This method should be re written!
-    protected Map<String, Object> findAvailableHostForContainer(Container
-                                                                        container, List<Map<String, Object>> createdVm){
-
+    protected GuestMapping findAvailableHostForContainer(Container
+                                                                        container, List<GuestMapping> createdVm) {
         double minPower = Double.MAX_VALUE;
-        PowerContainerHost allocatedHost = null;
+        PowerHost allocatedHost = null;
         ContainerVm allocatedVm = null;
-        List<ContainerHost> underUtilizedHostList = new ArrayList<>();
+        List<Host> underUtilizedHostList = new ArrayList<>();
         List<ContainerVm> vmList = new ArrayList<>();
-        for(Map<String, Object> map:createdVm){
-            underUtilizedHostList.add((ContainerHost) map.get("host"));
-
+        for(GuestMapping map : createdVm){
+            underUtilizedHostList.add((Host) map.host());
         }
-        ContainerHostList.sortByCpuUtilization(underUtilizedHostList);
-        for (ContainerHost host1 : underUtilizedHostList) {
+        HostList.sortByCpuUtilization(underUtilizedHostList);
+        for (Host host1 : underUtilizedHostList) {
 
-            PowerContainerHost host = (PowerContainerHost) host1;
-            for(Map<String, Object> map:createdVm){
-                if((ContainerHost) map.get("host")== host1){
-                vmList.add((ContainerVm) map.get("vm"));
+            PowerHost host = (PowerHost) host1;
+            for(GuestMapping map : createdVm) {
+                if (map.host() == host1) {
+                    vmList.add((ContainerVm) map.vm());
                 }
-
             }
             for (ContainerVm vm : vmList) {
 //                if vm is not created no need for checking!
 
-                if (vm.isSuitableForContainer(container)) {
+                if (vm.isSuitableForGuest(container)) {
                     // if vm is overutilized or host would be overutilized after the allocation, this host is not chosen!
                     if (!isVmOverUtilized(vm)) {
                         continue;
@@ -490,35 +445,26 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
             }
         }
 
-
-        Map<String, Object> map = new HashMap<>();
-        map.put("vm", allocatedVm);
-        map.put("host", allocatedHost);
-
-        return map;
-
-
+        return new GuestMapping(allocatedVm, allocatedHost);
     }
 
     private ContainerVm getNewVm(int vmType) {
 
-        ArrayList<ContainerPe> peList = new ArrayList<ContainerPe>();
+        ArrayList<Pe> peList = new ArrayList<>();
 //        int vmType = new RandomGen().getNum(ConstantsEx.VM_TYPES);
 //            int vmType = i / (int) Math.ceil((double) containerVmsNumber / 4.0D);
 //            int vmType = 1;
 //        Log.print(vmType);
         for (int j = 0; j < vmPes[vmType]; ++j) {
-            peList.add(new ContainerPe(j, new CotainerPeProvisionerSimple((double) vmMips[vmType])));
+            peList.add(new Pe(j, new PeProvisionerSimple(vmMips[vmType])));
         }
         int brokerId = 2;
-        PowerContainerVm vm = new PowerContainerVm(IDs.pollId(ContainerVm.class), brokerId, (double) vmMips[vmType],
+        return new PowerContainerVm(IDs.pollId(ContainerVm.class), brokerId, vmMips[vmType],
                 vmRam[vmType],
                 vmBw, vmSize, "Xen",
-                new ContainerSchedulerTimeSharedOverSubscription(peList),
-                new ContainerRamProvisionerSimple(vmRam[vmType]),
-                new ContainerBwProvisionerSimple(vmBw), peList, 300);
-        return vm;
-
+                new VmSchedulerTimeSharedOverSubscription(peList),
+                new RamProvisionerSimple(vmRam[vmType]),
+                new BwProvisionerSimple(vmBw), peList, 300);
     }
 
 
@@ -528,10 +474,10 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
      * @param excludedHosts the excluded hosts
      * @return the under utilized host
      */
-    protected List<ContainerHost> getUnderUtilizedHostList(Set<? extends ContainerHost> excludedHosts) {
-        List<ContainerHost> underUtilizedHostList = new ArrayList<>();
+    protected List<Host> getUnderUtilizedHostList(Set<? extends Host> excludedHosts) {
+        List<Host> underUtilizedHostList = new ArrayList<>();
         double minUtilization = 1;
-        for (PowerContainerHost host : this.<PowerContainerHost>getContainerHostList()) {
+        for (PowerHost host : this.<PowerHost>getHostList()) {
             if (excludedHosts.contains(host)) {
                 continue;
             }
@@ -545,32 +491,32 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
         return underUtilizedHostList;
     }
 
-    public Map<String, Object> findHostForContainer(Container container, Set<? extends ContainerHost> excludedHosts, boolean checkForVM) {
+    public GuestMapping findHostForGuest(GuestEntity container, Set<? extends HostEntity> excludedHosts, boolean checkForVM) {
         double minPower = Double.MAX_VALUE;
-        PowerContainerHost allocatedHost = null;
+        PowerHost allocatedHost = null;
         ContainerVm allocatedVm = null;
 
-        for (PowerContainerHost host : this.<PowerContainerHost>getContainerHostList()) {
+        for (PowerHost host : this.<PowerHost>getHostList()) {
             if (excludedHosts.contains(host)) {
                 continue;
             }
-            for (ContainerVm vm : host.getVmList()) {
+            for (ContainerVm vm : host.<ContainerVm>getGuestList()) {
                 if (checkForVM) {
                     if (vm.isInWaiting()) {
                         continue;
                     }
                 }
-                if (vm.isSuitableForContainer(container)) {
+                if (vm.isSuitableForGuest(container)) {
                     // if vm is overutilized or host would be overutilized after the allocation, this host is not chosen!
                     if (!isVmOverUtilized(vm)) {
                         continue;
                     }
-                    if (getUtilizationOfCpuMips(host) != 0 && isHostOverUtilizedAfterContainerAllocation(host, vm, container)) {
+                    if (getUtilizationOfCpuMips(host) != 0 && isHostOverUtilizedAfterContainerAllocation(host, vm, (Container) container)) {
                         continue;
                     }
 
                     try {
-                        double powerAfterAllocation = getPowerAfterContainerAllocation(host, container, vm);
+                        double powerAfterAllocation = getPowerAfterContainerAllocation(host, (Container) container, vm);
                         if (powerAfterAllocation != -1) {
                             double powerDiff = powerAfterAllocation - host.getPower();
                             if (powerDiff < minPower) {
@@ -584,18 +530,18 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
                 }
             }
         }
-        Map<String, Object> map = new HashMap<>();
-        map.put("vm", allocatedVm);
-        map.put("host", allocatedHost);
 
-        return map;
+        if (allocatedVm == null || allocatedHost == null) {
+            return null;
+        }
+        return new GuestMapping(allocatedVm, allocatedHost);
     }
 
     protected boolean isVmOverUtilized(ContainerVm vm) {
         boolean isOverUtilized = true;
         double util = 0;
 //        Log.printConcatLine("Checking if the vm is over utilized or not!");
-        for (Container container : vm.getContainerList()) {
+        for (GuestEntity container : vm.getGuestList()) {
             util += container.getTotalUtilizationOfCpuMips(CloudSim.clock());
         }
         if (util > vm.getHost().getTotalMips() / vm.getHost().getNumberOfPes() * vm.getNumberOfPes()) {
@@ -613,7 +559,7 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
      * @param container the vm
      * @return the power after allocation
      */
-    protected double getPowerAfterContainerAllocation(PowerContainerHost host, Container container, ContainerVm vm) {
+    protected double getPowerAfterContainerAllocation(PowerHost host, Container container, ContainerVm vm) {
         double power = 0;
         try {
             power = host.getPowerModel().getPower(getMaxUtilizationAfterContainerAllocation(host, container, vm));
@@ -632,15 +578,14 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
      * @param container the vm
      * @return the power after allocation
      */
-    protected double getMaxUtilizationAfterContainerAllocation(PowerContainerHost host, Container container, ContainerVm containerVm) {
+    protected double getMaxUtilizationAfterContainerAllocation(PowerHost host, Container container, ContainerVm containerVm) {
         double requestedTotalMips = container.getCurrentRequestedTotalMips();
         if (requestedTotalMips > containerVm.getMips()) {
             requestedTotalMips = containerVm.getMips();
         }
         double hostUtilizationMips = getUtilizationOfCpuMips(host);
         double hostPotentialUtilizationMips = hostUtilizationMips + requestedTotalMips;
-        double pePotentialUtilization = hostPotentialUtilizationMips / host.getTotalMips();
-        return pePotentialUtilization;
+        return hostPotentialUtilizationMips / host.getTotalMips();
     }
 
     /**
@@ -651,9 +596,9 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
      */
     protected double getUtilizationOfCpuMipsofVm(ContainerVm containerVm) {
         double vmUtilizationMips = 0;
-        for (Container container : containerVm.getContainerList()) {
+        for (GuestEntity container : containerVm.getGuestList()) {
 
-            vmUtilizationMips += containerVm.getTotalAllocatedMipsForContainer(container);
+            vmUtilizationMips += containerVm.getTotalAllocatedMipsForGuest(container);
         }
         return vmUtilizationMips;
     }
@@ -665,11 +610,11 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
      * @param container the vm
      * @return true, if is host over utilized after allocation
      */
-    protected boolean isHostOverUtilizedAfterContainerAllocation(PowerContainerHost host, ContainerVm vm, Container container) {
+    protected boolean isHostOverUtilizedAfterContainerAllocation(PowerHost host, ContainerVm vm, Container container) {
         boolean isHostOverUtilizedAfterAllocation = true;
-        if (vm.containerCreate(container)) {
+        if (vm.guestCreate(container)) {
             isHostOverUtilizedAfterAllocation = isHostOverUtilized(host);
-            vm.containerDestroy(container);
+            vm.guestDestroy(container);
         }
         return isHostOverUtilizedAfterAllocation;
     }
@@ -681,24 +626,20 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
     @Override
     protected void saveAllocation() {
         getSavedAllocation().clear();
-        for (ContainerHost host : getContainerHostList()) {
-            for (ContainerVm vm : host.getVmList()) {
-                if (host.getVmsMigratingIn().contains(vm)) {
+        for (Host host : this.<Host>getHostList()) {
+            for (ContainerVm vm : host.<ContainerVm>getGuestList()) {
+                if (host.getGuestsMigratingIn().contains(vm)) {
                     continue;
                 }
-                for (Container container : vm.getContainerList()) {
-                    if (vm.getContainersMigratingIn().contains(container)) {
+                for (GuestEntity container : vm.getGuestList()) {
+                    if (vm.getGuestsMigratingIn().contains(container)) {
                         continue;
                     }
-                    Map<String, Object> map = new HashMap<String, Object>();
-                    map.put("host", host);
-                    map.put("vm", vm);
-                    map.put("container", container);
-                    getSavedAllocation().add(map);
+                    getSavedAllocation().add(new GuestMapping((GuestEntity) vm, (HostEntity) host, (Container) container));
                 }
             }
         }
-        Log.printLine(String.format("The length of the saved map is ....%d", getSavedAllocation().size()));
+        Log.println(String.format("The length of the saved map is ....%d", getSavedAllocation().size()));
 
     }
 
@@ -707,40 +648,40 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
      * Restore allocation.
      */
     protected void restoreAllocation() {
-        for (ContainerHost host : getContainerHostList()) {
-            for (ContainerVm vm : host.getVmList()) {
-                vm.containerDestroyAll();
-                vm.reallocateMigratingInContainers();
+        for (Host host : this.<Host>getHostList()) {
+            for (ContainerVm vm : host.<ContainerVm>getGuestList()) {
+                vm.guestDestroyAll();
+                vm.reallocateMigratingInGuests();
             }
 
-            host.containerVmDestroyAll();
-            host.reallocateMigratingInContainerVms();
+            host.guestDestroyAll();
+            host.reallocateMigratingInGuests();
         }
-        for (Map<String, Object> map : getSavedAllocation()) {
-            PowerContainerVm vm = (PowerContainerVm) map.get("vm");
+        for (GuestMapping map : getSavedAllocation()) {
+            PowerContainerVm vm = (PowerContainerVm) map.vm();
 
-            PowerContainerHost host = (PowerContainerHost) map.get("host");
-            if (!host.getVmList().contains(vm)) {
-                if (!host.containerVmCreate(vm)) {
-                    Log.printConcatLine("Couldn't restore VM #", vm.getId(), " on host #", host.getId());
+            PowerHost host = (PowerHost) map.host();
+            if (!host.getGuestList().contains(vm)) {
+                if (!host.guestCreate(vm)) {
+                    Log.printlnConcat("Couldn't restore VM #", vm.getId(), " on host #", host.getId());
                     System.exit(0);
                 }
 
-                getVmTable().put(vm.getUid(), host);
+                getGuestTable().put(vm.getUid(), host);
             }
 //            vm.containerDestroyAll();
 //            vm.reallocateMigratingInContainers();
         }
 //        List<ContainerVm > restoredVms = new ArrayList<>();
-        for (Map<String, Object> map : getSavedAllocation()) {
-            PowerContainerVm vm = (PowerContainerVm) map.get("vm");
-            if (map.get("container") != null && map.containsKey("container")) {
-                Container container = (Container) map.get("container");
+        for (GuestMapping map : getSavedAllocation()) {
+            PowerContainerVm vm = (PowerContainerVm) map.vm();
+            if (map.container() != null) {
+                Container container = map.container();
 //                Log.print(container);
 
-                if (!vm.getContainerList().contains(container)) {
-                    if (!vm.containerCreate(container)) {
-                        Log.printConcatLine("Couldn't restore Container #", container.getId(), " on vm #", vm.getId());
+                if (!vm.getGuestList().contains(container)) {
+                    if (!vm.guestCreate(container)) {
+                        Log.printlnConcat("Couldn't restore Container #", container.getId(), " on vm #", vm.getId());
                         System.exit(0);
                     }
                 } else {
@@ -748,12 +689,12 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
                     Log.print("The Container is in the VM already");
                 }
 
-                if (container.getVm() == null) {
+                if (container.getHost() == null) {
                     Log.print("The Vm is null");
 
                 }
-                ((PowerContainerAllocationPolicy) getDatacenter().getContainerAllocationPolicy()).
-                        getContainerTable().put(container.getUid(), vm);
+                getDatacenter().getContainerAllocationPolicy().
+                        getGuestTable().put(container.getUid(), vm);
 //            container.setVm(vm);
 
             }
@@ -762,7 +703,7 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
 
     }
 
-    protected List<ContainerVm> createVms(ContainerHost host, boolean vmStatus) {
+    protected List<ContainerVm> createVms(Host host, boolean vmStatus) {
         List<ContainerVm> vmList = new ArrayList<>();
         while (true) {
             ContainerVm vm = createVMinHost(host, vmStatus);
@@ -780,15 +721,16 @@ public abstract class PowerContainerVmAllocationPolicyMigrationAbstractContainer
         return datacenter;
     }
 
-    public void setDatacenter(ContainerDatacenter datacenter) {
-        this.datacenter = datacenter;
+    @Override
+    public <T extends Datacenter> void setDatacenter(T datacenter) {
+        this.datacenter = (ContainerDatacenter) datacenter;
     }
 
-    public PowerContainerSelectionPolicy getContainerSelectionPolicy() {
+    public SelectionPolicy<PowerGuestEntity> getContainerSelectionPolicy() {
         return containerSelectionPolicy;
     }
 
-    public void setContainerSelectionPolicy(PowerContainerSelectionPolicy containerSelectionPolicy) {
+    public void setContainerSelectionPolicy(SelectionPolicy<PowerGuestEntity> containerSelectionPolicy) {
         this.containerSelectionPolicy = containerSelectionPolicy;
     }
 

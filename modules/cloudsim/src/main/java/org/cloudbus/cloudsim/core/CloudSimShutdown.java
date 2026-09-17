@@ -11,7 +11,7 @@ package org.cloudbus.cloudsim.core;
 /**
  * CloudimShutdown waits for termination of all CloudSim user entities to determine the end of
  * simulation. This class will be created by CloudSim upon initialisation of the simulation, i.e.
- * done via <tt>CloudSim.init()</tt> method. Hence, do not need to worry about creating an object of
+ * done via CloudSim.init() method. Hence, do not need to worry about creating an object of
  * this class. This object signals the end of simulation to CloudInformationService (CIS) entity.
  * 
  * @author Manzur Murshed
@@ -40,13 +40,13 @@ public class CloudSimShutdown extends SimEntity {
 	 * @pre numUser >= 0
 	 * @post $none
          * 
-         * @todo The use of Exception is not recommended. Specific exceptions
+         * //@TODO The use of Exception is not recommended. Specific exceptions
          * would be thrown (such as {@link IllegalArgumentException})
          * or {@link RuntimeException}
 	 */
 	public CloudSimShutdown(String name, int numUser) throws Exception {
 		// NOTE: This entity doesn't use any I/O port.
-		// super(name, CloudSimTags.DEFAULT_BAUD_RATE);
+		// super(name, Consts.DEFAULT_BAUD_RATE);
 		super(name);
 		this.numUser = numUser;
 	}
@@ -67,7 +67,7 @@ public class CloudSimShutdown extends SimEntity {
 	@Override
 	public void processEvent(SimEvent ev) {
 		numUser--;
-		if (numUser == 0 || ev.getTag() == CloudSimTags.ABRUPT_END_OF_SIMULATION) {
+		if (numUser == 0 || ev.getTag() == CloudActionTags.ABRUPT_END_OF_SIMULATION) {
 			CloudSim.abruptallyTerminate();
 		}
 	}

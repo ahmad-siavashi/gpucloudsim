@@ -15,14 +15,6 @@ import java.util.Calendar;
 import java.util.LinkedList;
 import java.util.List;
 
-import org.cloudbus.cloudsim.Cloudlet;
-import org.cloudbus.cloudsim.CloudletSchedulerTimeShared;
-import org.cloudbus.cloudsim.Datacenter;
-import org.cloudbus.cloudsim.DatacenterBroker;
-import org.cloudbus.cloudsim.DatacenterCharacteristics;
-import org.cloudbus.cloudsim.Storage;
-import org.cloudbus.cloudsim.UtilizationModel;
-import org.cloudbus.cloudsim.UtilizationModelFull;
 import org.cloudbus.cloudsim.core.CloudSim;
 import org.cloudbus.cloudsim.provisioners.BwProvisionerSimple;
 import org.cloudbus.cloudsim.provisioners.PeProvisionerSimple;
@@ -47,7 +39,7 @@ public class TimeSharedProblemDetector {
 	 */
 	public static void main(String[] args) {
 
-		Log.printLine("Starting CloudSimExample1...");
+		Log.println("Starting CloudSimExample1...");
 
 		try {
 			// First step: Initialize the CloudSim package. It should be called
@@ -62,7 +54,6 @@ public class TimeSharedProblemDetector {
 			// Second step: Create Datacenters
 			// Datacenters are the resource providers in CloudSim. We need at
 			// list one of them to run a CloudSim simulation
-			@SuppressWarnings("unused")
 			Datacenter datacenter0 = createDatacenter("Datacenter_0");
 
 			// Third step: Create Broker
@@ -70,7 +61,7 @@ public class TimeSharedProblemDetector {
 			int brokerId = broker.getId();
 
 			// Fourth step: Create one virtual machine
-			vmlist = new ArrayList<Vm>();
+			vmlist = new ArrayList<>();
 
 			// VM description
 			int vmid = 0;
@@ -94,10 +85,10 @@ public class TimeSharedProblemDetector {
 			vmlist.add(vm2);
 
 			// submit vm list to the broker
-			broker.submitVmList(vmlist);
+			broker.submitGuestList(vmlist);
 
 			// Fifth step: Create one Cloudlet
-			cloudletList = new ArrayList<Cloudlet>();
+			cloudletList = new ArrayList<>();
 
 			// Cloudlet properties
 			int id = 0;
@@ -108,15 +99,15 @@ public class TimeSharedProblemDetector {
 
 			Cloudlet cloudlet = new Cloudlet(id, length, pesNumber, fileSize, outputSize, utilizationModel, utilizationModel, utilizationModel);
 			cloudlet.setUserId(brokerId);
-			cloudlet.setVmId(vmid);
+			cloudlet.setGuestId(vmid);
 			
 			Cloudlet cloudlet1 = new Cloudlet(1, length, pesNumber, fileSize, outputSize, utilizationModel, utilizationModel, utilizationModel);
 			cloudlet1.setUserId(brokerId);
-			cloudlet1.setVmId(1);
+			cloudlet1.setGuestId(1);
 			
 			Cloudlet cloudlet2 = new Cloudlet(2, length, pesNumber, fileSize, outputSize, utilizationModel, utilizationModel, utilizationModel);
 			cloudlet2.setUserId(brokerId);
-			cloudlet2.setVmId(2);
+			cloudlet2.setGuestId(2);
 			
 
 			// add the cloudlet to the list
@@ -136,10 +127,10 @@ public class TimeSharedProblemDetector {
 			List<Cloudlet> newList = broker.getCloudletReceivedList();
 			printCloudletList(newList);
 
-			Log.printLine("CloudSimExample1 finished!");
+			Log.println("CloudSimExample1 finished!");
 		} catch (Exception e) {
 			e.printStackTrace();
-			Log.printLine("The simulation has been terminated due to an unexpected error");
+			Log.println("The simulation has been terminated due to an unexpected error");
 		}
 	}
 
@@ -155,11 +146,11 @@ public class TimeSharedProblemDetector {
 		// Here are the steps needed to create a PowerDatacenter:
 		// 1. We need to create a list to store
 		// our machine
-		List<Host> hostList = new ArrayList<Host>();
+		List<Host> hostList = new ArrayList<>();
 
 		// 2. A Machine contains one or more PEs or CPUs/Cores.
 		// In this example, it will have only one core.
-		List<Pe> peList = new ArrayList<Pe>();
+		List<Pe> peList = new ArrayList<>();
 
 		int mips = 1000;
 
@@ -197,7 +188,7 @@ public class TimeSharedProblemDetector {
 		double costPerStorage = 0.001; // the cost of using storage in this
 										// resource
 		double costPerBw = 0.0; // the cost of using bw in this resource
-		LinkedList<Storage> storageList = new LinkedList<Storage>(); // we are not adding SAN
+		LinkedList<Storage> storageList = new LinkedList<>(); // we are not adding SAN
 													// devices by now
 
 		DatacenterCharacteristics characteristics = new DatacenterCharacteristics(
@@ -244,27 +235,27 @@ public class TimeSharedProblemDetector {
 		Cloudlet cloudlet;
 
 		String indent = "    ";
-		Log.printLine();
-		Log.printLine("========== OUTPUT ==========");
-		Log.printLine("Cloudlet ID" + indent + "STATUS" + indent
+		Log.println();
+		Log.println("========== OUTPUT ==========");
+		Log.println("Cloudlet ID" + indent + "STATUS" + indent
 				+ "Data center ID" + indent + "VM ID" + indent + "Time" + indent
 				+ "Start Time" + indent + "Finish Time");
 
 		DecimalFormat dft = new DecimalFormat("###.##");
-		for (int i = 0; i < size; i++) {
-			cloudlet = list.get(i);
+		for (Cloudlet value : list) {
+			cloudlet = value;
 			Log.print(indent + cloudlet.getCloudletId() + indent + indent);
 
-			if (cloudlet.getCloudletStatus() == Cloudlet.SUCCESS) {
+			if (cloudlet.getStatus() == Cloudlet.CloudletStatus.SUCCESS) {
 				Log.print("SUCCESS");
 
-				Log.printLine(indent + indent + cloudlet.getResourceId()
-						+ indent + indent + indent + cloudlet.getVmId()
+				Log.println(indent + indent + cloudlet.getResourceId()
+						+ indent + indent + indent + cloudlet.getGuestId()
 						+ indent + indent
 						+ dft.format(cloudlet.getActualCPUTime()) + indent
 						+ indent + dft.format(cloudlet.getExecStartTime())
 						+ indent + indent
-						+ dft.format(cloudlet.getFinishTime()));
+						+ dft.format(cloudlet.getExecFinishTime()));
 			}
 		}
 	}

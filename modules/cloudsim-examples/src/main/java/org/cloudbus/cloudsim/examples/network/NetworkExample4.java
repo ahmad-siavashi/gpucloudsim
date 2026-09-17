@@ -43,6 +43,7 @@ import org.cloudbus.cloudsim.provisioners.RamProvisionerSimple;
  * the links, links are inserted in the code.
  */
 public class NetworkExample4 {
+	public static DatacenterBroker broker;
 
 	/** The cloudlet list. */
 	private static List<Cloudlet> cloudletList;
@@ -55,7 +56,7 @@ public class NetworkExample4 {
 	 */
 	public static void main(String[] args) {
 
-		Log.printLine("Starting NetworkExample4...");
+		Log.println("Starting NetworkExample4...");
 
 		try {
 			// First step: Initialize the CloudSim package. It should be called
@@ -72,11 +73,11 @@ public class NetworkExample4 {
 			Datacenter datacenter0 = createDatacenter("Datacenter_0");
 
 			//Third step: Create Broker
-			DatacenterBroker broker = createBroker();
+			broker = new DatacenterBroker("Broker");
 			int brokerId = broker.getId();
 
 			//Fourth step: Create one virtual machine
-			vmlist = new ArrayList<Vm>();
+			vmlist = new ArrayList<>();
 
 			//VM description
 			int vmid = 0;
@@ -94,11 +95,11 @@ public class NetworkExample4 {
 			vmlist.add(vm1);
 
 			//submit vm list to the broker
-			broker.submitVmList(vmlist);
+			broker.submitGuestList(vmlist);
 
 
 			//Fifth step: Create one Cloudlet
-			cloudletList = new ArrayList<Cloudlet>();
+			cloudletList = new ArrayList<>();
 
 			//Cloudlet properties
 			int id = 0;
@@ -131,11 +132,11 @@ public class NetworkExample4 {
 
 			printCloudletList(newList);
 
-			Log.printLine("NetworkExample4 finished!");
+			Log.println("NetworkExample4 finished!");
 		}
 		catch (Exception e) {
 			e.printStackTrace();
-			Log.printLine("The simulation has been terminated due to an unexpected error");
+			Log.println("The simulation has been terminated due to an unexpected error");
 		}
 	}
 
@@ -144,11 +145,11 @@ public class NetworkExample4 {
 		// Here are the steps needed to create a PowerDatacenter:
 		// 1. We need to create a list to store
 		//    our machine
-		List<Host> hostList = new ArrayList<Host>();
+		List<Host> hostList = new ArrayList<>();
 
 		// 2. A Machine contains one or more PEs or CPUs/Cores.
 		// In this example, it will have only one core.
-		List<Pe> peList = new ArrayList<Pe>();
+		List<Pe> peList = new ArrayList<>();
 
 		int mips = 1000;
 
@@ -184,7 +185,7 @@ public class NetworkExample4 {
 		double costPerMem = 0.05;		// the cost of using memory in this resource
 		double costPerStorage = 0.001;	// the cost of using storage in this resource
 		double costPerBw = 0.0;			// the cost of using bw in this resource
-		LinkedList<Storage> storageList = new LinkedList<Storage>();	//we are not adding SAN devices by now
+		LinkedList<Storage> storageList = new LinkedList<>();	//we are not adding SAN devices by now
 
 		DatacenterCharacteristics characteristics = new DatacenterCharacteristics(
 				arch, os, vmm, hostList, time_zone, cost, costPerMem,
@@ -202,20 +203,6 @@ public class NetworkExample4 {
 		return datacenter;
 	}
 
-	//We strongly encourage users to develop their own broker policies, to submit vms and cloudlets according
-	//to the specific rules of the simulated scenario
-	private static DatacenterBroker createBroker(){
-
-		DatacenterBroker broker = null;
-		try {
-			broker = new DatacenterBroker("Broker");
-		} catch (Exception e) {
-			e.printStackTrace();
-			return null;
-		}
-		return broker;
-	}
-
 	/**
 	 * Prints the Cloudlet objects
 	 * @param list  list of Cloudlets
@@ -225,24 +212,24 @@ public class NetworkExample4 {
 		Cloudlet cloudlet;
 
 		String indent = "    ";
-		Log.printLine();
-		Log.printLine("========== OUTPUT ==========");
-		Log.printLine("Cloudlet ID" + indent + "STATUS" + indent +
+		Log.println();
+		Log.println("========== OUTPUT ==========");
+		Log.println("Cloudlet ID" + indent + "STATUS" + indent +
 				"Data center ID" + indent + "VM ID" + indent + "Time" + indent + "Start Time" + indent + "Finish Time");
 
-		for (int i = 0; i < size; i++) {
-			cloudlet = list.get(i);
-			Log.print(indent + cloudlet.getCloudletId() + indent + indent);
+        for (Cloudlet value : list) {
+            cloudlet = value;
+            Log.print(indent + cloudlet.getCloudletId() + indent + indent);
 
-			if (cloudlet.getCloudletStatus() == Cloudlet.SUCCESS){
-				Log.print("SUCCESS");
+            if (cloudlet.getStatus() == Cloudlet.CloudletStatus.SUCCESS) {
+                Log.print("SUCCESS");
 
-				DecimalFormat dft = new DecimalFormat("###.##");
-				Log.printLine( indent + indent + cloudlet.getResourceId() + indent + indent + indent + cloudlet.getVmId() +
-						indent + indent + dft.format(cloudlet.getActualCPUTime()) + indent + indent + dft.format(cloudlet.getExecStartTime())+
-						indent + indent + dft.format(cloudlet.getFinishTime()));
-			}
-		}
+                DecimalFormat dft = new DecimalFormat("###.##");
+                Log.println(indent + indent + cloudlet.getResourceId() + indent + indent + indent + cloudlet.getGuestId() +
+                        indent + indent + dft.format(cloudlet.getActualCPUTime()) + indent + indent + dft.format(cloudlet.getExecStartTime()) +
+                        indent + indent + dft.format(cloudlet.getExecFinishTime()));
+            }
+        }
 
 	}
 }

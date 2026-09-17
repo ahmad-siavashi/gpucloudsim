@@ -16,9 +16,8 @@ import java.io.OutputStream;
  * substitute the output stream by any OutputStream subclass.
  * 
  * @author Anton Beloglazov
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 2.0
- * @todo To add a method to print formatted text, such as the 
- * {@link String#format(java.lang.String, java.lang.Object...)} method.
  */
 public class Log {
 
@@ -33,7 +32,7 @@ public class Log {
 	private static boolean disabled;
 	
 	/** Buffer to avoid creating new string builder upon every print. */
-	private static StringBuilder buffer = new StringBuilder();		    
+	private static final StringBuilder buffer = new StringBuilder();
 
 	/**
 	 * Prints a message.
@@ -66,20 +65,26 @@ public class Log {
 	 * 
 	 * @param message the message
 	 */
-	public static void printLine(String message) {
+	public static void println(String message) {
 		if (!isDisabled()) {
 			print(message + LINE_SEPARATOR);
 		}
 	}
 
+	@Deprecated
+	public static void printLine(String message) { println(message); }
+
 	/**
 	 * Prints an empty line.
 	 */
-	public static void printLine() {
+	public static void println() {
 		if (!isDisabled()) {
 			print(LINE_SEPARATOR);
 		}
 	}
+
+	@Deprecated
+	public static void printLine() { println(); }
 
 
 	/**
@@ -90,9 +95,9 @@ public class Log {
 	public static void printConcat(Object... messages) {
 		if (!isDisabled()) {
 			buffer.setLength(0); // Clear the buffer		    
-			for(int i = 0 ; i < messages.length ; i ++) {
-				buffer.append(String.valueOf(messages[i]));
-			}
+            for (Object message : messages) {
+                buffer.append(message);
+            }
 			print(buffer);
 		}
 	}
@@ -102,16 +107,18 @@ public class Log {
 	 * 
 	 * @param messages the messages to print
 	 */
-	public static void printConcatLine(Object... messages) {
+	public static void printlnConcat(Object... messages) {
 		if (!isDisabled()) {
 			buffer.setLength(0); // Clear the buffer		    
-			for(int i = 0 ; i < messages.length ; i ++) {
-				buffer.append(String.valueOf(messages[i]));
-			}
-			printLine(buffer);
+            for (Object message : messages) {
+                buffer.append(message);
+            }
+			println(buffer);
 		}
 	}
 
+	@Deprecated
+	public static void printConcatLine(Object... messages) { printlnConcat(messages);}
 	
 	
 	/**
@@ -119,12 +126,14 @@ public class Log {
 	 * 
 	 * @param message the message
 	 */
-	public static void printLine(Object message) {
+	public static void println(Object message) {
 	    if (!isDisabled()) {
-		printLine(String.valueOf(message));
+		println(String.valueOf(message));
 	    }
 	}
 
+	@Deprecated
+	public static void printLine(Object message) { println(message); }
 	
 	
 	/**
@@ -147,7 +156,7 @@ public class Log {
 	 */
 	public static void formatLine(String format, Object... args) {
 		if (!isDisabled()) {
-			printLine(String.format(format, args));
+			println(String.format(format, args));
 		}
 	}
 

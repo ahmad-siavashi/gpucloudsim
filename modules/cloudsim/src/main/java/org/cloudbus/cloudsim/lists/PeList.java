@@ -12,12 +12,13 @@ import java.util.List;
 
 import org.cloudbus.cloudsim.Log;
 import org.cloudbus.cloudsim.Pe;
-import org.cloudbus.cloudsim.Vm;
+import org.cloudbus.cloudsim.core.GuestEntity;
 
 /**
  * PeList is a collection of operations on lists of PEs.
  * 
  * @author Anton Beloglazov
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 2.0
  */
 public class PeList {
@@ -32,7 +33,7 @@ public class PeList {
 	 * @post $none
 	 */
 	public static <T extends Pe> Pe getById(List<T> peList, int id) {
-                /*@todo such kind of search would be made using a HashMap
+                /*//@TODO such kind of search would be made using a HashMap
                 (to avoid always iterating over the list),
                 where the key is the id of the object and the value the object
                 itself. The same occurs for lists of hosts and VMs.*/
@@ -96,15 +97,15 @@ public class PeList {
 
 	/**
 	 * Gets the max utilization percentage among all PEs allocated to a VM.
-	 * 
-	 * @param vm the vm to get the maximum utilization percentage
+	 *
 	 * @param peList the pe list
+	 * @param guest  the vm to get the maximum utilization percentage
 	 * @return the max utilization percentage
 	 */
-	public static <T extends Pe> double getMaxUtilizationAmongVmsPes(List<T> peList, Vm vm) {
+	public static <T extends Pe> double getMaxUtilizationAmongGuestsPes(List<T> peList, GuestEntity guest) {
 		double maxUtilization = 0;
 		for (Pe pe : peList) {
-			if (pe.getPeProvisioner().getAllocatedMipsForVm(vm) == null) {
+			if (pe.getPeProvisioner().getAllocatedMipsForGuest(guest) == null) {
 				continue;
 			}
 			double utilization = pe.getPeProvisioner().getUtilization();
@@ -124,7 +125,7 @@ public class PeList {
 	 * @post $none
 	 */
 	public static <T extends Pe> Pe getFreePe(List<T> peList) {
-		for (Pe pe : peList) {
+		for (T pe : peList) {
 			if (pe.getStatus() == Pe.FREE) {
 				return pe;
 			}
@@ -141,13 +142,13 @@ public class PeList {
 	 * @post $result >= 0
 	 */
 	public static <T extends Pe> int getNumberOfFreePes(List<T> peList) {
-		int cnt = 0;
-		for (Pe pe : peList) {
+		int numberOfFreePes = 0;
+		for (T pe : peList) {
 			if (pe.getStatus() == Pe.FREE) {
-				cnt++;
+				numberOfFreePes++;
 			}
 		}
-		return cnt;
+		return numberOfFreePes;
 	}
 
 	/**
@@ -179,13 +180,13 @@ public class PeList {
 	 * @post $result >= 0
 	 */
 	public static <T extends Pe> int getNumberOfBusyPes(List<T> peList) {
-		int cnt = 0;
-		for (Pe pe : peList) {
+		int numberOfBusyPes = 0;
+		for (T pe : peList) {
 			if (pe.getStatus() == Pe.BUSY) {
-				cnt++;
+				numberOfBusyPes++;
 			}
 		}
-		return cnt;
+		return numberOfBusyPes;
 	}
 
 	/**
@@ -205,14 +206,9 @@ public class PeList {
 			String resName,
 			int hostId,
 			boolean failed) {
-		String status = null;
-		if (failed) {
-			status = "FAILED";
-		} else {
-			status = "WORKING";
-		}
+		String status = failed ? "FAILED" : "WORKING";
 
-		Log.printConcatLine(resName, " - Machine: ", hostId, " is ", status);
+		Log.printlnConcat(resName, " - Machine: ", hostId, " is ", status);
 
 		setStatusFailed(peList, failed);
 	}
@@ -226,13 +222,9 @@ public class PeList {
 	 */
 	public static <T extends Pe> void setStatusFailed(List<T> peList, boolean failed) {
 		// a loop to set the status of all the PEs in this machine
-		for (Pe pe : peList) {
-			if (failed) {
-				pe.setStatus(Pe.FAILED);
-			} else {
-				pe.setStatus(Pe.FREE);
-			}
-		}
+		peList.forEach(pe -> {
+			pe.setStatus(failed ? Pe.FAILED : Pe.FREE);
+		});
 	}
 
 }

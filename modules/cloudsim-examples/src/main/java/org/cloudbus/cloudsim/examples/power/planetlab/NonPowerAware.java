@@ -4,16 +4,12 @@ import java.io.IOException;
 import java.util.Calendar;
 import java.util.List;
 
-import org.cloudbus.cloudsim.Cloudlet;
-import org.cloudbus.cloudsim.DatacenterBroker;
-import org.cloudbus.cloudsim.Log;
-import org.cloudbus.cloudsim.Vm;
+import org.cloudbus.cloudsim.*;
 import org.cloudbus.cloudsim.core.CloudSim;
 import org.cloudbus.cloudsim.examples.power.Constants;
 import org.cloudbus.cloudsim.examples.power.Helper;
 import org.cloudbus.cloudsim.power.PowerDatacenterNonPowerAware;
 import org.cloudbus.cloudsim.power.PowerHost;
-import org.cloudbus.cloudsim.power.PowerVmAllocationPolicySimple;
 
 /**
  * A simulation of a heterogeneous non-power aware data center: all hosts consume maximum power all
@@ -29,9 +25,10 @@ import org.cloudbus.cloudsim.power.PowerVmAllocationPolicySimple;
  * Anton Beloglazov, and Rajkumar Buyya, "Optimal Online Deterministic Algorithms and Adaptive
  * Heuristics for Energy and Performance Efficient Dynamic Consolidation of Virtual Machines in
  * Cloud Data Centers", Concurrency and Computation: Practice and Experience (CCPE), Volume 24,
- * Issue 13, Pages: 1397-1420, John Wiley & Sons, Ltd, New York, USA, 2012
+ * Issue 13, Pages: 1397-1420, John Wiley &amp; Sons, Ltd, New York, USA, 2012
  * 
  * @author Anton Beloglazov
+ * @author Remo Andreoli
  * @since Jan 5, 2012
  */
 public class NonPowerAware {
@@ -49,7 +46,7 @@ public class NonPowerAware {
 				.getPath();
 
 		Log.setDisabled(!Constants.ENABLE_OUTPUT);
-		Log.printLine("Starting " + experimentName);
+		Log.println("Starting " + experimentName);
 
 		try {
 			CloudSim.init(1, Calendar.getInstance(), false);
@@ -65,18 +62,18 @@ public class NonPowerAware {
 					"Datacenter",
 					PowerDatacenterNonPowerAware.class,
 					hostList,
-					new PowerVmAllocationPolicySimple(hostList));
+					new VmAllocationPolicySimple(hostList));
 
 			datacenter.setDisableMigrations(true);
 
-			broker.submitVmList(vmList);
+			broker.submitGuestList(vmList);
 			broker.submitCloudletList(cloudletList);
 
 			CloudSim.terminateSimulation(Constants.SIMULATION_LIMIT);
 			double lastClock = CloudSim.startSimulation();
 
 			List<Cloudlet> newList = broker.getCloudletReceivedList();
-			Log.printLine("Received " + newList.size() + " cloudlets");
+			Log.println("Received " + newList.size() + " cloudlets");
 
 			CloudSim.stopSimulation();
 
@@ -90,11 +87,11 @@ public class NonPowerAware {
 
 		} catch (Exception e) {
 			e.printStackTrace();
-			Log.printLine("The simulation has been terminated due to an unexpected error");
+			Log.println("The simulation has been terminated due to an unexpected error");
 			System.exit(0);
 		}
 
-		Log.printLine("Finished " + experimentName);
+		Log.println("Finished " + experimentName);
 	}
 
 }

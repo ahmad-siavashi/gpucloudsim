@@ -185,7 +185,7 @@ public class CloudSimGpuExample3 {
 			cloudletList.get(2).setVmId(vmlist.get(1).getId());
 
 			// submit vm list to the broker
-			broker.submitVmList(vmlist);
+			broker.submitGuestList(vmlist);
 
 			// submit cloudlet list to the broker
 			broker.submitCloudletList(cloudletList);
@@ -352,7 +352,7 @@ public class CloudSimGpuExample3 {
 			at.addRule();
 			at.addRow("Cloudlet ID", "Status", "Datacenter ID", "VM ID", "Time", "Start Time", "Finish Time");
 			at.addRule();
-			if (gpuCloudlet.getStatus() == Cloudlet.SUCCESS) {
+			if (gpuCloudlet.getStatus() == Cloudlet.CloudletStatus.SUCCESS) {
 				at.addRow(gpuCloudlet.getCloudletId(), "SUCCESS", gpuCloudlet.getResourceId(), gpuCloudlet.getVmId(),
 						dft.format(gpuCloudlet.getActualCPUTime()).toString(),
 						dft.format(gpuCloudlet.getExecStartTime()).toString(),

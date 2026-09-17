@@ -82,7 +82,7 @@ public class GridGpuVmAllocationPolicyVird extends GpuVmAllocationPolicy {
 			boolean result = false;
 
 			if (!vm.hasVgpu()) {
-				for (Host host : getHostList()) {
+				for (Host host : this.<Host>getHostList()) {
 					result = allocateHostForVm(vm, host);
 					if (result) {
 						break;

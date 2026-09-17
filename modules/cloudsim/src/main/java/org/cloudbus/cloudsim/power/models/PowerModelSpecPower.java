@@ -19,7 +19,7 @@ package org.cloudbus.cloudsim.power.models;
  * <li><a href="http://dx.doi.org/10.1002/cpe.1867">Anton Beloglazov, and Rajkumar Buyya, "Optimal Online Deterministic Algorithms and Adaptive
  * Heuristics for Energy and Performance Efficient Dynamic Consolidation of Virtual Machines in
  * Cloud Data Centers", Concurrency and Computation: Practice and Experience (CCPE), Volume 24,
- * Issue 13, Pages: 1397-1420, John Wiley & Sons, Ltd, New York, USA, 2012</a>
+ * Issue 13, Pages: 1397-1420, John Wiley &amp; Sons, Ltd, New York, USA, 2012</a>
  * </ul>
  * 
  * @author Anton Beloglazov
@@ -39,8 +39,7 @@ public abstract class PowerModelSpecPower implements PowerModel {
 		double power1 = getPowerData(utilization1);
 		double power2 = getPowerData(utilization2);
 		double delta = (power2 - power1) / 10;
-		double power = power1 + delta * (utilization - (double) utilization1 / 10) * 100;
-		return power;
+        return power1 + delta * (utilization - (double) utilization1 / 10) * 100;
 	}
 
 	/**

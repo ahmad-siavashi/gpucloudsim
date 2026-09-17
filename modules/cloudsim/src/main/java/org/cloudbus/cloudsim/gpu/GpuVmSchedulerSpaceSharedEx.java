@@ -7,6 +7,7 @@ import java.util.List;
 import org.cloudbus.cloudsim.Pe;
 import org.cloudbus.cloudsim.Vm;
 import org.cloudbus.cloudsim.VmSchedulerSpaceShared;
+import org.cloudbus.cloudsim.core.GuestEntity;
 
 /**
  * 
@@ -23,7 +24,8 @@ public class GpuVmSchedulerSpaceSharedEx extends VmSchedulerSpaceShared {
 	}
 
 	@Override
-	public boolean allocatePesForVm(Vm vm, List<Double> mipsShare) {
+	public boolean allocatePesForGuest(GuestEntity guest, List<Double> mipsShare) {
+		Vm vm = (Vm) guest;
 		// if there is no enough free PEs, fails
 		if (getFreePes().size() < vm.getNumberOfPes()) {
 			return false;
@@ -54,7 +56,7 @@ public class GpuVmSchedulerSpaceSharedEx extends VmSchedulerSpaceShared {
 		getFreePes().removeAll(selectedPes);
 
 		getPeAllocationMap().put(vm.getUid(), selectedPes);
-		getMipsMap().put(vm.getUid(), allocatedMips);
+		getMipsMapAllocated().put(vm.getUid(), allocatedMips);
 		setAvailableMips(getAvailableMips() - totalMips);
 		return true;
 	}

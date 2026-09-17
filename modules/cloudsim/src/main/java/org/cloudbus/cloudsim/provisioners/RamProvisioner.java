@@ -9,6 +9,7 @@
 package org.cloudbus.cloudsim.provisioners;
 
 import org.cloudbus.cloudsim.Vm;
+import org.cloudbus.cloudsim.core.GuestEntity;
 
 /**
  * RamProvisioner is an abstract class that represents the provisioning policy used by a host
@@ -44,35 +45,40 @@ public abstract class RamProvisioner {
 
 	/**
 	 * Allocates RAM for a given VM.
-	 * 
-	 * @param vm the virtual machine for which the RAM is being allocated
-	 * @param ram the RAM to be allocated to the VM
-	 * 
+	 *
+	 * @param guest the virtual machine for which the RAM is being allocated
+	 * @param ram   the RAM to be allocated to the VM
 	 * @return $true if the RAM could be allocated; $false otherwise
-	 * 
 	 * @pre $none
 	 * @post $none
 	 */
-	public abstract boolean allocateRamForVm(Vm vm, int ram);
+	public abstract boolean allocateRamForGuest(GuestEntity guest, int ram);
+
+	@Deprecated
+	public boolean allocateRamForVm(Vm vm, int ram) { return allocateRamForGuest(vm, ram); }
 
 	/**
 	 * Gets the allocated RAM for a given VM.
-	 * 
-	 * @param vm the VM
-	 * 
+	 *
+	 * @param guest the VM
 	 * @return the allocated RAM for the vm
 	 */
-	public abstract int getAllocatedRamForVm(Vm vm);
+	public abstract int getAllocatedRamForGuest(GuestEntity guest);
+
+	@Deprecated
+	public int getAllocatedRamForVm(Vm vm) { return getAllocatedRamForGuest(vm); };
 
 	/**
 	 * Releases RAM used by a VM.
-	 * 
-	 * @param vm the vm
-	 * 
+	 *
+	 * @param guest the vm
 	 * @pre $none
 	 * @post none
 	 */
-	public abstract void deallocateRamForVm(Vm vm);
+	public abstract void deallocateRamForGuest(GuestEntity guest);
+
+	@Deprecated
+	public void deallocateRamForVm(Vm vm) { deallocateRamForGuest(vm); }
 
 	/**
 	 * Releases RAM used by all VMs.
@@ -80,21 +86,26 @@ public abstract class RamProvisioner {
 	 * @pre $none
 	 * @post none
 	 */
-	public void deallocateRamForAllVms() {
+	public void deallocateRamForAllGuests() {
 		setAvailableRam(getRam());
 	}
 
+	@Deprecated
+	public void deallocateRamForAllVms() { deallocateRamForAllGuests(); }
+
 	/**
 	 * Checks if it is possible to change the current allocated RAM for the VM
-         * to a new amount, depending on the available RAM.
-	 * 
-	 * @param vm the vm to check if there is enough available RAM on the host to 
-         * change the VM allocated RAM
-	 * @param ram the new total amount of RAM for the VM.
-	 * 
+	 * to a new amount, depending on the available RAM.
+	 *
+	 * @param guest the vm to check if there is enough available RAM on the host to
+	 *              change the VM allocated RAM
+	 * @param ram   the new total amount of RAM for the VM.
 	 * @return true, if is suitable for vm
 	 */
-	public abstract boolean isSuitableForVm(Vm vm, int ram);
+	public abstract boolean isSuitableForGuest(GuestEntity guest, int ram);
+
+	@Deprecated
+	public boolean isSuitableForVm(Vm vm, int ram) { return isSuitableForGuest(vm, ram); }
 
 	/**
 	 * Gets the ram capacity.

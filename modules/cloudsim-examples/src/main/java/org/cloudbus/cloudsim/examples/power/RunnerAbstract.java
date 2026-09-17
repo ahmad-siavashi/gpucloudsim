@@ -6,26 +6,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 
-import org.cloudbus.cloudsim.Cloudlet;
-import org.cloudbus.cloudsim.DatacenterBroker;
-import org.cloudbus.cloudsim.Log;
-import org.cloudbus.cloudsim.Vm;
-import org.cloudbus.cloudsim.VmAllocationPolicy;
+import org.cloudbus.cloudsim.*;
 import org.cloudbus.cloudsim.core.CloudSim;
-import org.cloudbus.cloudsim.power.PowerDatacenter;
-import org.cloudbus.cloudsim.power.PowerHost;
-import org.cloudbus.cloudsim.power.PowerVmAllocationPolicyMigrationAbstract;
-import org.cloudbus.cloudsim.power.PowerVmAllocationPolicyMigrationInterQuartileRange;
-import org.cloudbus.cloudsim.power.PowerVmAllocationPolicyMigrationLocalRegression;
-import org.cloudbus.cloudsim.power.PowerVmAllocationPolicyMigrationLocalRegressionRobust;
-import org.cloudbus.cloudsim.power.PowerVmAllocationPolicyMigrationMedianAbsoluteDeviation;
-import org.cloudbus.cloudsim.power.PowerVmAllocationPolicyMigrationStaticThreshold;
-import org.cloudbus.cloudsim.power.PowerVmAllocationPolicySimple;
-import org.cloudbus.cloudsim.power.PowerVmSelectionPolicy;
-import org.cloudbus.cloudsim.power.PowerVmSelectionPolicyMaximumCorrelation;
-import org.cloudbus.cloudsim.power.PowerVmSelectionPolicyMinimumMigrationTime;
-import org.cloudbus.cloudsim.power.PowerVmSelectionPolicyMinimumUtilization;
-import org.cloudbus.cloudsim.power.PowerVmSelectionPolicyRandomSelection;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.power.*;
+import org.cloudbus.cloudsim.selectionPolicies.*;
 
 /**
  * The Class RunnerAbstract.
@@ -36,9 +21,10 @@ import org.cloudbus.cloudsim.power.PowerVmSelectionPolicyRandomSelection;
  * Anton Beloglazov, and Rajkumar Buyya, "Optimal Online Deterministic Algorithms and Adaptive
  * Heuristics for Energy and Performance Efficient Dynamic Consolidation of Virtual Machines in
  * Cloud Data Centers", Concurrency and Computation: Practice and Experience (CCPE), Volume 24,
- * Issue 13, Pages: 1397-1420, John Wiley & Sons, Ltd, New York, USA, 2012
+ * Issue 13, Pages: 1397-1420, John Wiley &amp; Sons, Ltd, New York, USA, 2012
  * 
  * @author Anton Beloglazov
+ * @author Remo Andreoli
  */
 public abstract class RunnerAbstract {
 
@@ -166,14 +152,14 @@ public abstract class RunnerAbstract {
 
 			datacenter.setDisableMigrations(false);
 
-			broker.submitVmList(vmList);
+			broker.submitGuestList(vmList);
 			broker.submitCloudletList(cloudletList);
 
 			CloudSim.terminateSimulation(Constants.SIMULATION_LIMIT);
 			double lastClock = CloudSim.startSimulation();
 
 			List<Cloudlet> newList = broker.getCloudletReceivedList();
-			Log.printLine("Received " + newList.size() + " cloudlets");
+			Log.println("Received " + newList.size() + " cloudlets");
 
 			CloudSim.stopSimulation();
 
@@ -187,11 +173,11 @@ public abstract class RunnerAbstract {
 
 		} catch (Exception e) {
 			e.printStackTrace();
-			Log.printLine("The simulation has been terminated due to an unexpected error");
+			Log.println("The simulation has been terminated due to an unexpected error");
 			System.exit(0);
 		}
 
-		Log.printLine("Finished " + experimentName);
+		Log.println("Finished " + experimentName);
 	}
 
 	/**
@@ -227,66 +213,77 @@ public abstract class RunnerAbstract {
 			String vmSelectionPolicyName,
 			String parameterName) {
 		VmAllocationPolicy vmAllocationPolicy = null;
-		PowerVmSelectionPolicy vmSelectionPolicy = null;
+		SelectionPolicy<GuestEntity> vmSelectionPolicy = null;
 		if (!vmSelectionPolicyName.isEmpty()) {
 			vmSelectionPolicy = getVmSelectionPolicy(vmSelectionPolicyName);
 		}
 		double parameter = 0;
 		if (!parameterName.isEmpty()) {
-			parameter = Double.valueOf(parameterName);
+			parameter = Double.parseDouble(parameterName);
 		}
-		if (vmAllocationPolicyName.equals("iqr")) {
-			PowerVmAllocationPolicyMigrationAbstract fallbackVmSelectionPolicy = new PowerVmAllocationPolicyMigrationStaticThreshold(
-					hostList,
-					vmSelectionPolicy,
-					0.7);
-			vmAllocationPolicy = new PowerVmAllocationPolicyMigrationInterQuartileRange(
-					hostList,
-					vmSelectionPolicy,
-					parameter,
-					fallbackVmSelectionPolicy);
-		} else if (vmAllocationPolicyName.equals("mad")) {
-			PowerVmAllocationPolicyMigrationAbstract fallbackVmSelectionPolicy = new PowerVmAllocationPolicyMigrationStaticThreshold(
-					hostList,
-					vmSelectionPolicy,
-					0.7);
-			vmAllocationPolicy = new PowerVmAllocationPolicyMigrationMedianAbsoluteDeviation(
-					hostList,
-					vmSelectionPolicy,
-					parameter,
-					fallbackVmSelectionPolicy);
-		} else if (vmAllocationPolicyName.equals("lr")) {
-			PowerVmAllocationPolicyMigrationAbstract fallbackVmSelectionPolicy = new PowerVmAllocationPolicyMigrationStaticThreshold(
-					hostList,
-					vmSelectionPolicy,
-					0.7);
-			vmAllocationPolicy = new PowerVmAllocationPolicyMigrationLocalRegression(
-					hostList,
-					vmSelectionPolicy,
-					parameter,
-					Constants.SCHEDULING_INTERVAL,
-					fallbackVmSelectionPolicy);
-		} else if (vmAllocationPolicyName.equals("lrr")) {
-			PowerVmAllocationPolicyMigrationAbstract fallbackVmSelectionPolicy = new PowerVmAllocationPolicyMigrationStaticThreshold(
-					hostList,
-					vmSelectionPolicy,
-					0.7);
-			vmAllocationPolicy = new PowerVmAllocationPolicyMigrationLocalRegressionRobust(
-					hostList,
-					vmSelectionPolicy,
-					parameter,
-					Constants.SCHEDULING_INTERVAL,
-					fallbackVmSelectionPolicy);
-		} else if (vmAllocationPolicyName.equals("thr")) {
-			vmAllocationPolicy = new PowerVmAllocationPolicyMigrationStaticThreshold(
-					hostList,
-					vmSelectionPolicy,
-					parameter);
-		} else if (vmAllocationPolicyName.equals("dvfs")) {
-			vmAllocationPolicy = new PowerVmAllocationPolicySimple(hostList);
-		} else {
-			System.out.println("Unknown VM allocation policy: " + vmAllocationPolicyName);
-			System.exit(0);
+		switch (vmAllocationPolicyName) {
+			case "iqr": {
+				PowerVmAllocationPolicyMigrationAbstract fallbackVmSelectionPolicy = new PowerVmAllocationPolicyMigrationStaticThreshold(
+						hostList,
+						vmSelectionPolicy,
+						0.7);
+				vmAllocationPolicy = new PowerVmAllocationPolicyMigrationInterQuartileRange(
+						hostList,
+						vmSelectionPolicy,
+						parameter,
+						fallbackVmSelectionPolicy);
+				break;
+			}
+			case "mad": {
+				PowerVmAllocationPolicyMigrationAbstract fallbackVmSelectionPolicy = new PowerVmAllocationPolicyMigrationStaticThreshold(
+						hostList,
+						vmSelectionPolicy,
+						0.7);
+				vmAllocationPolicy = new PowerVmAllocationPolicyMigrationMedianAbsoluteDeviation(
+						hostList,
+						vmSelectionPolicy,
+						parameter,
+						fallbackVmSelectionPolicy);
+				break;
+			}
+			case "lr": {
+				PowerVmAllocationPolicyMigrationAbstract fallbackVmSelectionPolicy = new PowerVmAllocationPolicyMigrationStaticThreshold(
+						hostList,
+						vmSelectionPolicy,
+						0.7);
+				vmAllocationPolicy = new PowerVmAllocationPolicyMigrationLocalRegression(
+						hostList,
+						vmSelectionPolicy,
+						parameter,
+						Constants.SCHEDULING_INTERVAL,
+						fallbackVmSelectionPolicy);
+				break;
+			}
+			case "lrr": {
+				PowerVmAllocationPolicyMigrationAbstract fallbackVmSelectionPolicy = new PowerVmAllocationPolicyMigrationStaticThreshold(
+						hostList,
+						vmSelectionPolicy,
+						0.7);
+				vmAllocationPolicy = new PowerVmAllocationPolicyMigrationLocalRegressionRobust(
+						hostList,
+						vmSelectionPolicy,
+						parameter,
+						Constants.SCHEDULING_INTERVAL,
+						fallbackVmSelectionPolicy);
+				break;
+			}
+			case "thr":
+				vmAllocationPolicy = new PowerVmAllocationPolicyMigrationStaticThreshold(
+						hostList,
+						vmSelectionPolicy,
+						parameter);
+				break;
+			case "dvfs":
+				vmAllocationPolicy = new VmAllocationPolicySimpler(hostList);
+				break;
+			default:
+				System.out.println("Unknown VM allocation policy: " + vmAllocationPolicyName);
+				System.exit(0);
 		}
 		return vmAllocationPolicy;
 	}
@@ -297,20 +294,25 @@ public abstract class RunnerAbstract {
 	 * @param vmSelectionPolicyName the vm selection policy name
 	 * @return the vm selection policy
 	 */
-	protected PowerVmSelectionPolicy getVmSelectionPolicy(String vmSelectionPolicyName) {
-		PowerVmSelectionPolicy vmSelectionPolicy = null;
-		if (vmSelectionPolicyName.equals("mc")) {
-			vmSelectionPolicy = new PowerVmSelectionPolicyMaximumCorrelation(
-					new PowerVmSelectionPolicyMinimumMigrationTime());
-		} else if (vmSelectionPolicyName.equals("mmt")) {
-			vmSelectionPolicy = new PowerVmSelectionPolicyMinimumMigrationTime();
-		} else if (vmSelectionPolicyName.equals("mu")) {
-			vmSelectionPolicy = new PowerVmSelectionPolicyMinimumUtilization();
-		} else if (vmSelectionPolicyName.equals("rs")) {
-			vmSelectionPolicy = new PowerVmSelectionPolicyRandomSelection();
-		} else {
-			System.out.println("Unknown VM selection policy: " + vmSelectionPolicyName);
-			System.exit(0);
+	protected <T extends GuestEntity> SelectionPolicy<T> getVmSelectionPolicy(String vmSelectionPolicyName) {
+		SelectionPolicy<T> vmSelectionPolicy = null;
+		switch (vmSelectionPolicyName) {
+			case "mc":
+				vmSelectionPolicy = (SelectionPolicy<T>) new PowerSelectionPolicyMaximumCorrelation(
+						new SelectionPolicyMinimumMigrationTime());
+				break;
+			case "mmt":
+				vmSelectionPolicy = (SelectionPolicy<T>) new SelectionPolicyMinimumMigrationTime();
+				break;
+			case "mu":
+				vmSelectionPolicy = (SelectionPolicy<T>) new SelectionPolicyMinimumUtilization();
+				break;
+			case "rs":
+				vmSelectionPolicy = new SelectionPolicyRandomSelection<>();
+				break;
+			default:
+				System.out.println("Unknown VM selection policy: " + vmSelectionPolicyName);
+				System.exit(0);
 		}
 		return vmSelectionPolicy;
 	}

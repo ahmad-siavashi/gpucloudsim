@@ -5,8 +5,8 @@ import java.util.Set;
 
 import org.cloudbus.cloudsim.Host;
 import org.cloudbus.cloudsim.Pe;
-import org.cloudbus.cloudsim.Vm;
 import org.cloudbus.cloudsim.VmScheduler;
+import org.cloudbus.cloudsim.core.GuestEntity;
 import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicy;
 import org.cloudbus.cloudsim.provisioners.BwProvisioner;
 import org.cloudbus.cloudsim.provisioners.RamProvisioner;
@@ -74,10 +74,10 @@ public class GpuHost extends Host {
 	}
 
 	@Override
-	public boolean isSuitableForVm(Vm vm) {
-		boolean result = vmCreate(vm);
+	public boolean isSuitableForGuest(GuestEntity guest) {
+		boolean result = guestCreate(guest);
 		if (result) {
-			vmDestroy(vm);
+			guestDestroy(guest);
 		}
 		return result;
 	}

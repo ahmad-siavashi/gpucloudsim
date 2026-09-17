@@ -76,10 +76,7 @@ public class SanStorage extends HarddriveStorage {
 
 		// the max transfer rate is the minimum between
 		// the network bandwidth and the disk rate
-		if (diskRate < bandwidth) {
-			return diskRate;
-		}
-		return bandwidth;
+		return Math.min(diskRate, bandwidth);
 	}
 
 	@Override
@@ -95,8 +92,8 @@ public class SanStorage extends HarddriveStorage {
 	@Override
 	public double addFile(List<File> list) {
 		double result = 0.0;
-		if (list == null || list.size() == 0) {
-			Log.printConcatLine(getName(), ".addFile(): Warning - list is empty.");
+		if (list == null || list.isEmpty()) {
+			Log.printlnConcat(getName(), ".addFile(): Warning - list is empty.");
 			return result;
 		}
 

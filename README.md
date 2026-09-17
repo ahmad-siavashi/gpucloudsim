@@ -29,7 +29,7 @@ We are constantly adding new features to the extension. Please consider reportin
 
 ### Download
 
-This package contains CloudSim 4.0 with the latest version of the GPU extension.
+This package contains CloudSim 7.0.1 with the latest version of the GPU extension.
 
 ### Disclaimer
 

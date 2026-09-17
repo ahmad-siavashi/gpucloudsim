@@ -12,7 +12,6 @@ package org.cloudbus.cloudsim.core;
  * This class represents a simulation event which is passed between the entities in the simulation.
  * 
  * @author Costas Simatos
- * @see Simulation
  * @see SimEntity
  */
 public class SimEvent implements Cloneable, Comparable<SimEvent> {
@@ -33,11 +32,11 @@ public class SimEvent implements Cloneable, Comparable<SimEvent> {
 	private int entDst;
 
 	/** The user defined type of the event. **/
-	private final int tag;
+	private final CloudSimTags tag;
 
 	/** 
          * Any data the event is carrying. 
-         * @todo I would be used generics to define the type of the event data.
+         * //@TODO I would be used generics to define the type of the event data.
          * But this modification would incur several changes in the simulator core
          * that has to be assessed first.
          **/
@@ -63,36 +62,19 @@ public class SimEvent implements Cloneable, Comparable<SimEvent> {
 
 	public static final int CREATE = 3;
 
-	/**
-	 * Creates a blank event.
-	 */
-	public SimEvent() {
-		etype = ENULL;
-		time = -1L;
-		endWaitingTime = -1.0;
-		entSrc = -1;
-		entDst = -1;
-		tag = -1;
-		data = null;
-	}
-
 	// ------------------- PACKAGE LEVEL METHODS --------------------------
-	SimEvent(int evtype, double time, int src, int dest, int tag, Object edata) {
-		etype = evtype;
+	SimEvent(int type, double time, int src, int dest, CloudSimTags tag, Object edata) {
+		etype = type;
 		this.time = time;
 		entSrc = src;
 		entDst = dest;
 		this.tag = tag;
 		data = edata;
+		endWaitingTime = -1.0;
 	}
 
-	SimEvent(int evtype, double time, int src) {
-		etype = evtype;
-		this.time = time;
-		entSrc = src;
-		entDst = -1;
-		tag = -1;
-		data = null;
+	SimEvent(int type, double time, int src) {
+		this(type, time, src, src, CloudActionTags.BLANK, null);
 	}
 
 	protected void setSerial(long serial) {
@@ -112,7 +94,7 @@ public class SimEvent implements Cloneable, Comparable<SimEvent> {
 
 	@Override
 	public String toString() {
-		return "Event tag = " + tag + " source = " + CloudSim.getEntity(entSrc).getName() + " destination = "
+		return "Time ="+this.time+", Event tag = " + tag + " source = " + CloudSim.getEntity(entSrc).getName() + " destination = "
 				+ CloudSim.getEntity(entDst).getName();
 	}
 
@@ -148,19 +130,22 @@ public class SimEvent implements Cloneable, Comparable<SimEvent> {
 	 * 
 	 * @return the id number
 	 */
-	public int getDestination() {
-		return entDst;
-	}
+	public int getDestinationId() { return entDst; }
+	@Deprecated
+	public int getDestination() { return entDst; }
 
 	/**
 	 * Get the unique id number of the entity which scheduled this event.
 	 * 
 	 * @return the id number
 	 */
+	public int getSourceId() {
+		return entSrc;
+	}
+	@Deprecated
 	public int getSource() {
 		return entSrc;
 	}
-
 	/**
 	 * Get the simulation time that this event was scheduled.
 	 * 
@@ -184,7 +169,7 @@ public class SimEvent implements Cloneable, Comparable<SimEvent> {
 	 * 
 	 * @return The tag
 	 */
-	public int type() {
+	public CloudSimTags type() {
 		return tag;
 	}
 
@@ -202,7 +187,7 @@ public class SimEvent implements Cloneable, Comparable<SimEvent> {
 	 * 
 	 * @return The tag
 	 */
-	public int getTag() {
+	public CloudSimTags getTag() {
 		return tag;
 	}
 
@@ -218,23 +203,5 @@ public class SimEvent implements Cloneable, Comparable<SimEvent> {
 	@Override
 	public Object clone() {
 		return new SimEvent(etype, time, entSrc, entDst, tag, data);
-	}
-
-	/**
-	 * Set the source entity of this event.
-	 * 
-	 * @param s The unique id number of the entity
-	 */
-	public void setSource(int s) {
-		entSrc = s;
-	}
-
-	/**
-	 * Set the destination entity of this event.
-	 * 
-	 * @param d The unique id number of the entity
-	 */
-	public void setDestination(int d) {
-		entDst = d;
 	}
 }

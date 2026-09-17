@@ -11,7 +11,7 @@ package org.cloudbus.cloudsim.provisioners;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.cloudbus.cloudsim.Vm;
+import org.cloudbus.cloudsim.core.GuestEntity;
 
 /**
  * BwProvisionerSimple is an extension of {@link BwProvisioner} which uses a best-effort policy to
@@ -36,54 +36,53 @@ public class BwProvisionerSimple extends BwProvisioner {
 	 */
 	public BwProvisionerSimple(long bw) {
 		super(bw);
-		setBwTable(new HashMap<String, Long>());
+		setBwTable(new HashMap<>());
 	}
 
 	@Override
-	public boolean allocateBwForVm(Vm vm, long bw) {
-		deallocateBwForVm(vm);
+	public boolean allocateBwForGuest(GuestEntity guest, long bw) {
+		long old_bw = getAllocatedBwForGuest(guest);
 
-		if (getAvailableBw() >= bw) {
-			setAvailableBw(getAvailableBw() - bw);
-			getBwTable().put(vm.getUid(), bw);
-			vm.setCurrentAllocatedBw(getAllocatedBwForVm(vm));
+		if (getAvailableBw() + old_bw >= bw) {
+			setAvailableBw(getAvailableBw() + old_bw - bw);
+			bwTable.put(guest.getUid(), bw);
+			guest.setCurrentAllocatedBw(bw);
 			return true;
 		}
 
-		vm.setCurrentAllocatedBw(getAllocatedBwForVm(vm));
 		return false;
 	}
 
 	@Override
-	public long getAllocatedBwForVm(Vm vm) {
-		if (getBwTable().containsKey(vm.getUid())) {
-			return getBwTable().get(vm.getUid());
-		}
-		return 0;
+	public long getAllocatedBwForGuest(GuestEntity guest) {
+		Long bw = bwTable.get(guest.getUid());
+		if (bw != null)
+			return bw;
+		else
+			return 0;
 	}
 
 	@Override
-	public void deallocateBwForVm(Vm vm) {
-		if (getBwTable().containsKey(vm.getUid())) {
-			long amountFreed = getBwTable().remove(vm.getUid());
-			setAvailableBw(getAvailableBw() + amountFreed);
-			vm.setCurrentAllocatedBw(0);
-		}
+	public void deallocateBwForGuest(GuestEntity guest) {
+		Long allocatedBw = bwTable.remove(guest.getUid());
+		if (allocatedBw != null)
+			setAvailableBw(getAvailableBw() + allocatedBw);
+		guest.setCurrentAllocatedBw(0);
 	}
 
 	@Override
-	public void deallocateBwForAllVms() {
-		super.deallocateBwForAllVms();
+	public void deallocateBwForAllGuests() {
+		super.deallocateBwForAllGuests();
 		getBwTable().clear();
 	}
 
 	@Override
-	public boolean isSuitableForVm(Vm vm, long bw) {
-		long allocatedBw = getAllocatedBwForVm(vm);
-		boolean result = allocateBwForVm(vm, bw);
-		deallocateBwForVm(vm);
+	public boolean isSuitableForGuest(GuestEntity guest, long bw) {
+		long allocatedBw = getAllocatedBwForGuest(guest);
+		boolean result = allocateBwForGuest(guest, bw);
+		deallocateBwForGuest(guest);
 		if (allocatedBw > 0) {
-			allocateBwForVm(vm, allocatedBw);
+			allocateBwForGuest(guest, allocatedBw);
 		}
 		return result;
 	}

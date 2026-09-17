@@ -1,112 +1,100 @@
-<?xml version="1.0"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-  <parent>
-    <artifactId>modules</artifactId>
-    <groupId>org.cloudbus.cloudsim</groupId>
-    <version>4.0</version>
-  </parent>
-  
-  <artifactId>cloudsim</artifactId>
-  <name>cloudsim</name>
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-<!-- Switch OFF the docling in Java 8 -->  
-	<profiles>
-		<profile>
-			<id>doclint-java8-disable</id>
-			<activation>
-				<jdk>[1.8,)</jdk>
-			</activation>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-javadoc-plugin</artifactId>
-						<configuration>
-							<additionalparam>-Xdoclint:none</additionalparam>
-						</configuration>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
-	</profiles>
-<!-- ===================================== -->
-  
-  <build>
-  	<plugins>
-  		<plugin>
-  			<groupId>org.apache.maven.plugins</groupId>
-  			<artifactId>maven-javadoc-plugin</artifactId>
-  			<version>2.8</version>
-  			<executions>
-  				<execution>
-  					<id>docs</id>
-  					<phase>prepare-package</phase>
-  					<goals>
-  						<goal>jar</goal>
-  					</goals>
-  				</execution>
-  			</executions>
-            
-			<configuration>
-				<!-- failOnError>false</failOnError -->
-				<tags>
-					<tag>
-						<name>pre</name>
-						<placement>a</placement>
-						<head>Precondition:</head>
-					</tag>
-					<tag>
-						<name>post</name>
-						<placement>a</placement>
-						<head>Postcondition:</head>
-					</tag>
-				</tags>
-			</configuration>
-		</plugin>
-	</plugins>
-  </build>
+    <parent>
+        <artifactId>cloudsim-package</artifactId>
+        <groupId>org.cloudbus.cloudsim</groupId>
+        <version>7.0.1</version>
+        <relativePath>../../</relativePath>
+    </parent>
+
+    <artifactId>cloudsim</artifactId>
+    <name>cloudsim</name>
+
     <dependencies>
-    	<dependency>
-        	<groupId>commons-collections</groupId>
-        	<artifactId>commons-collections</artifactId>
-        	<version>3.2.1</version>
+        <!-- https://mvnrepository.com/artifact/com.google.guava/guava -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-lang3 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-math3 -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
-            <version>3.4.1</version>
-            <type>jar</type>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/commons-net/commons-net -->
         <dependency>
-        	<groupId>com.opencsv</groupId>
-        	<artifactId>opencsv</artifactId>
-        	<version>3.7</version>
+            <groupId>commons-net</groupId>
+            <artifactId>commons-net</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/commons-io/commons-io -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.gatling.uncommons.maths/uncommons-maths -->
+        <dependency>
+            <groupId>io.gatling.uncommons.maths</groupId>
+            <artifactId>uncommons-maths</artifactId>
+        </dependency>
+
+        <!-- GPUCloudSim: used by gpu.VgpuScheduler and gpu.VgpuSchedulerSpaceShared -->
+        <!-- https://mvnrepository.com/artifact/commons-collections/commons-collections -->
+        <dependency>
+            <groupId>commons-collections</groupId>
+            <artifactId>commons-collections</artifactId>
+            <version>3.2.2</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.opencsv/opencsv -->
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>5.9</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.maxmind.geoip2/geoip2 -->
+        <dependency>
+            <groupId>com.maxmind.geoip2</groupId>
+            <artifactId>geoip2</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.easymock/easymock -->
+        <dependency>
+            <groupId>org.easymock</groupId>
+            <artifactId>easymock</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/junit/junit -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
-    <reporting>
-	<plugins>
-	  <plugin>
-		<groupId>org.apache.maven.plugins</groupId>
-		<artifactId>maven-javadoc-plugin</artifactId>
-		<version>2.8</version>
-	  </plugin>
-	  <plugin>
-		<groupId>org.apache.maven.plugins</groupId>
-		<artifactId>maven-jxr-plugin</artifactId>
-		<version>2.3</version>
-	  </plugin>
-	  <plugin>
-		<groupId>org.sonatype.maven.plugin</groupId>
-		<artifactId>emma-maven-plugin</artifactId>
-		<version>1.2</version>
-	  </plugin>
-	  <plugin>
-		<groupId>org.apache.maven.plugins</groupId>
-		<artifactId>maven-surefire-report-plugin</artifactId>
-		<version>2.11</version>
-	  </plugin>
-	</plugins>
-  </reporting>	
-  
+
+    <build>
+        <plugins>
+            <!-- JUnit 5 requires Surefire version 2.22.0 or higher -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.22.0</version>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -14,6 +14,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import org.cloudbus.cloudsim.core.GuestEntity;
 import org.cloudbus.cloudsim.lists.PeList;
 import org.cloudbus.cloudsim.provisioners.PeProvisioner;
 
@@ -27,6 +28,7 @@ import org.cloudbus.cloudsim.provisioners.PeProvisioner;
  * 
  * @author Rodrigo N. Calheiros
  * @author Anton Beloglazov
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 1.0
  */
 public class VmSchedulerTimeShared extends VmScheduler {
@@ -46,24 +48,22 @@ public class VmSchedulerTimeShared extends VmScheduler {
 	 */
 	public VmSchedulerTimeShared(List<? extends Pe> pelist) {
 		super(pelist);
-		setMipsMapRequested(new HashMap<String, List<Double>>());
+		setMipsMapRequested(new HashMap<>());
 	}
 
 	@Override
-	public boolean allocatePesForVm(Vm vm, List<Double> mipsShareRequested) {
+	public boolean allocatePesForGuest(GuestEntity guest, List<Double> mipsShareRequested) {
 		/*
-		 * @todo add the same to RAM and BW provisioners
+		 * //@TODO add the same to RAM and BW provisioners
 		 */
-		if (vm.isInMigration()) {
-			if (!getVmsMigratingIn().contains(vm.getUid()) && !getVmsMigratingOut().contains(vm.getUid())) {
-				getVmsMigratingOut().add(vm.getUid());
+		if (guest.isInMigration()) {
+			if (!getGuestsMigratingIn().contains(guest.getUid()) && !getGuestsMigratingOut().contains(guest.getUid())) {
+				getGuestsMigratingOut().add(guest.getUid());
 			}
 		} else {
-			if (getVmsMigratingOut().contains(vm.getUid())) {
-				getVmsMigratingOut().remove(vm.getUid());
-			}
+			getGuestsMigratingOut().remove(guest.getUid());
 		}
-		boolean result = allocatePesForVm(vm.getUid(), mipsShareRequested);
+		boolean result = allocatePesForGuest(guest.getUid(), mipsShareRequested);
 		updatePeProvisioning();
 		return result;
 	}
@@ -75,7 +75,7 @@ public class VmSchedulerTimeShared extends VmScheduler {
 	 * @param mipsShareRequested the list of mips share requested by the vm
 	 * @return true, if successful
 	 */
-	protected boolean allocatePesForVm(String vmUid, List<Double> mipsShareRequested) {
+	protected boolean allocatePesForGuest(String vmUid, List<Double> mipsShareRequested) {
 		double totalRequestedMips = 0;
 		double peMips = getPeCapacity();
 		for (Double mips : mipsShareRequested) {
@@ -94,24 +94,24 @@ public class VmSchedulerTimeShared extends VmScheduler {
 		getMipsMapRequested().put(vmUid, mipsShareRequested);
 		setPesInUse(getPesInUse() + mipsShareRequested.size());
 
-		if (getVmsMigratingIn().contains(vmUid)) {
+		if (getGuestsMigratingIn().contains(vmUid)) {
 			// the destination host only experience 10% of the migrating VM's MIPS
 			totalRequestedMips *= 0.1;
 		}
 
-		List<Double> mipsShareAllocated = new ArrayList<Double>();
+		List<Double> mipsShareAllocated = new ArrayList<>();
 		for (Double mipsRequested : mipsShareRequested) {
-			if (getVmsMigratingOut().contains(vmUid)) {
+			if (getGuestsMigratingOut().contains(vmUid)) {
 				// performance degradation due to migration = 10% MIPS
 				mipsRequested *= 0.9;
-			} else if (getVmsMigratingIn().contains(vmUid)) {
+			} else if (getGuestsMigratingIn().contains(vmUid)) {
 				// the destination host only experience 10% of the migrating VM's MIPS
 				mipsRequested *= 0.1;
 			}
 			mipsShareAllocated.add(mipsRequested);
 		}
 
-		getMipsMap().put(vmUid, mipsShareAllocated);
+		getMipsMapAllocated().put(vmUid, mipsShareAllocated);
 		setAvailableMips(getAvailableMips() - totalRequestedMips);
 
 		return true;
@@ -119,40 +119,41 @@ public class VmSchedulerTimeShared extends VmScheduler {
 
 	/**
 	 * Update allocation of VMs on PEs.
-         * @too The method is too long and may be refactored to make clearer its
+         * @todo The method is too long and may be refactored to make clearer its
          * responsibility.
 	 */
 	protected void updatePeProvisioning() {
 		getPeMap().clear();
 		for (Pe pe : getPeList()) {
-			pe.getPeProvisioner().deallocateMipsForAllVms();
+			pe.getPeProvisioner().deallocateMipsForAllGuests();
 		}
 
-		Iterator<Pe> peIterator = getPeList().iterator();
+		Iterator<? extends Pe> peIterator = getPeList().iterator();
 		Pe pe = peIterator.next();
 		PeProvisioner peProvisioner = pe.getPeProvisioner();
 		double availableMips = peProvisioner.getAvailableMips();
 
-		for (Map.Entry<String, List<Double>> entry : getMipsMap().entrySet()) {
+		for (Map.Entry<String, List<Double>> entry : getMipsMapAllocated().entrySet()) {
 			String vmUid = entry.getKey();
-			getPeMap().put(vmUid, new LinkedList<Pe>());
+			getPeMap().put(vmUid, new LinkedList<>());
 
+			// Spread mips share among the Pes
 			for (double mips : entry.getValue()) {
-				while (mips >= 0.1) {
+				while (mips >= 0.1) { // rounding error
 					if (availableMips >= mips) {
-						peProvisioner.allocateMipsForVm(vmUid, mips);
+						peProvisioner.allocateMipsForGuest(vmUid, mips);
 						getPeMap().get(vmUid).add(pe);
 						availableMips -= mips;
 						break;
-					} else {
-						peProvisioner.allocateMipsForVm(vmUid, availableMips);
+					} else { // next pe needed, no more space
+						peProvisioner.allocateMipsForGuest(vmUid, availableMips);
 						getPeMap().get(vmUid).add(pe);
 						mips -= availableMips;
 						if (mips <= 0.1) {
 							break;
 						}
 						if (!peIterator.hasNext()) {
-							Log.printConcatLine("There is no enough MIPS (", mips, ") to accommodate VM ", vmUid);
+							Log.printlnConcat("There is no enough MIPS (", mips, ") to accommodate VM ", vmUid);
 							// System.exit(0);
 						}
 						pe = peIterator.next();
@@ -165,20 +166,20 @@ public class VmSchedulerTimeShared extends VmScheduler {
 	}
 
 	@Override
-	public void deallocatePesForVm(Vm vm) {
-		getMipsMapRequested().remove(vm.getUid());
+	public void deallocatePesForGuest(GuestEntity guest) {
+		getMipsMapRequested().remove(guest.getUid());
 		setPesInUse(0);
-		getMipsMap().clear();
+		getMipsMapAllocated().clear();
 		setAvailableMips(PeList.getTotalMips(getPeList()));
 
 		for (Pe pe : getPeList()) {
-			pe.getPeProvisioner().deallocateMipsForVm(vm);
+			pe.getPeProvisioner().deallocateMipsForGuest(guest);
 		}
 
+		// Re-allocate to remaining guests
 		for (Map.Entry<String, List<Double>> entry : getMipsMapRequested().entrySet()) {
-			allocatePesForVm(entry.getKey(), entry.getValue());
+			allocatePesForGuest(entry.getKey(), entry.getValue());
 		}
-
 		updatePeProvisioning();
 	}
 
@@ -189,8 +190,8 @@ public class VmSchedulerTimeShared extends VmScheduler {
 	 * @post $none
 	 */
 	@Override
-	public void deallocatePesForAllVms() {
-		super.deallocatePesForAllVms();
+	public void deallocatePesForAllGuests() {
+		super.deallocatePesForAllGuests();
 		getMipsMapRequested().clear();
 		setPesInUse(0);
 	}
@@ -241,5 +242,4 @@ public class VmSchedulerTimeShared extends VmScheduler {
 	protected void setMipsMapRequested(Map<String, List<Double>> mipsMapRequested) {
 		this.mipsMapRequested = mipsMapRequested;
 	}
-
 }

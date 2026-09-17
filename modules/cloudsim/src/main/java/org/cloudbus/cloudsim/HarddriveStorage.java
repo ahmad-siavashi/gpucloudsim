@@ -65,7 +65,7 @@ public class HarddriveStorage implements Storage {
 	 * @throws ParameterException when the name and the capacity are not valid
 	 */
 	public HarddriveStorage(String name, double capacity) throws ParameterException {
-		if (name == null || name.length() == 0) {
+		if (name == null || name.isEmpty()) {
 			throw new ParameterException("HarddriveStorage(): Error - invalid storage name.");
 		}
 
@@ -101,8 +101,8 @@ public class HarddriveStorage implements Storage {
 	 * created.
 	 */
 	private void init() {
-		fileList = new ArrayList<File>();
-		nameList = new ArrayList<String>();
+		fileList = new ArrayList<>();
+		nameList = new ArrayList<>();
 		gen = null;
 		currentSize = 0;
 
@@ -118,10 +118,8 @@ public class HarddriveStorage implements Storage {
 
 	@Override
 	public boolean isFull() {
-		if (Math.abs(currentSize - capacity) < .0000001) { // currentSize == capacity
-			return true;
-		}
-		return false;
+		// currentSize == capacity
+		return Math.abs(currentSize - capacity) < .0000001;
 	}
 
 	@Override
@@ -288,8 +286,8 @@ public class HarddriveStorage implements Storage {
 	public File getFile(String fileName) {
 		// check first whether file name is valid or not
 		File obj = null;
-		if (fileName == null || fileName.length() == 0) {
-			Log.printConcatLine(name, ".getFile(): Warning - invalid " + "file name.");
+		if (fileName == null || fileName.isEmpty()) {
+			Log.printlnConcat(name, ".getFile(): Warning - invalid file name.");
 			return obj;
 		}
 
@@ -378,13 +376,13 @@ public class HarddriveStorage implements Storage {
 	private boolean isFileValid(File file, String methodName) {
 
 		if (file == null) {
-			Log.printConcatLine(name, ".", methodName, ": Warning - the given file is null.");
+			Log.printlnConcat(name, ".", methodName, ": Warning - the given file is null.");
 			return false;
 		}
 
 		String fileName = file.getName();
-		if (fileName == null || fileName.length() == 0) {
-			Log.printConcatLine(name, "." + methodName, ": Warning - invalid file name.");
+		if (fileName == null || fileName.isEmpty()) {
+			Log.printlnConcat(name, ".", methodName, ": Warning - invalid file name.");
 			return false;
 		}
 
@@ -410,7 +408,7 @@ public class HarddriveStorage implements Storage {
 
 		// check the capacity
 		if (file.getSize() + currentSize > capacity) {
-			Log.printConcatLine(name, ".addFile(): Warning - not enough space to store ", file.getName());
+			Log.printlnConcat(name, ".addFile(): Warning - not enough space to store ", file.getName());
 			return result;
 		}
 
@@ -432,7 +430,7 @@ public class HarddriveStorage implements Storage {
 	public double addFile(List<File> list) {
 		double result = 0.0;
 		if (list == null || list.isEmpty()) {
-			Log.printConcatLine(name, ".addFile(): Warning - list is empty.");
+			Log.printlnConcat(name, ".addFile(): Warning - list is empty.");
 			return result;
 		}
 
@@ -447,7 +445,7 @@ public class HarddriveStorage implements Storage {
 
 	@Override
 	public File deleteFile(String fileName) {
-		if (fileName == null || fileName.length() == 0) {
+		if (fileName == null || fileName.isEmpty()) {
 			return null;
 		}
 
@@ -498,14 +496,12 @@ public class HarddriveStorage implements Storage {
 	@Override
 	public boolean contains(String fileName) {
 		boolean result = false;
-		if (fileName == null || fileName.length() == 0) {
-			Log.printConcatLine(name, ".contains(): Warning - invalid file name");
+		if (fileName == null || fileName.isEmpty()) {
+			Log.printlnConcat(name, ".contains(): Warning - invalid file name");
 			return result;
 		}
 		// check each file in the list
-		Iterator<String> it = nameList.iterator();
-		while (it.hasNext()) {
-			String name = it.next();
+		for (String name : nameList) {
 			if (name.equals(fileName)) {
 				result = true;
 				break;
@@ -543,9 +539,7 @@ public class HarddriveStorage implements Storage {
 		}
 
 		// replace the file name in the name list
-		Iterator<String> it = nameList.iterator();
-		while (it.hasNext()) {
-			String name = it.next();
+		for (String name : nameList) {
 			if (name.equals(file.getName())) {
 				file.setTransactionTime(0);
 				nameList.remove(name);

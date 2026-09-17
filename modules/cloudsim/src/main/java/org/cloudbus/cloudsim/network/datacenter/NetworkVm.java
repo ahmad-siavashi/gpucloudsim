@@ -1,92 +1,104 @@
 /*
- * Title:        CloudSim Toolkit
- * Description:  CloudSim (Cloud Simulation) Toolkit for Modeling and Simulation of Clouds
- * Licence:      GPL - http://www.gnu.org/copyleft/gpl.html
+ * Title: CloudSim Toolkit Description: CloudSim (Cloud Simulation) Toolkit for Modeling and
+ * Simulation of Clouds Licence: GPL - http://www.gnu.org/copyleft/gpl.html
  *
- * Copyright (c) 2009-2012, The University of Melbourne, Australia
+ * Copyright (c) 2009-2024, The University of Melbourne, Australia
  */
 
 package org.cloudbus.cloudsim.network.datacenter;
 
-import java.util.ArrayList;
+import org.cloudbus.cloudsim.*;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.core.HostEntity;
+import org.cloudbus.cloudsim.core.NetworkedEntity;
+import org.cloudbus.cloudsim.core.VirtualEntity;
+import org.cloudbus.cloudsim.lists.CloudletList;
+import org.cloudbus.cloudsim.lists.VmList;
+import org.cloudbus.cloudsim.provisioners.BwProvisioner;
+import org.cloudbus.cloudsim.provisioners.RamProvisioner;
 
-import org.cloudbus.cloudsim.CloudletScheduler;
-import org.cloudbus.cloudsim.Vm;
+import java.util.List;
+import java.util.Map;
 
 /**
- * NetworkVm class extends {@link Vm} to support simulation of networked datacenters. 
- * It executes actions related to management of packets (sent and received).
- * 
- * <br/>Please refer to following publication for more details:<br/>
- * <ul>
- * <li><a href="http://dx.doi.org/10.1109/UCC.2011.24">Saurabh Kumar Garg and Rajkumar Buyya, NetworkCloudSim: Modelling Parallel Applications in Cloud
- * Simulations, Proceedings of the 4th IEEE/ACM International Conference on Utility and Cloud
- * Computing (UCC 2011, IEEE CS Press, USA), Melbourne, Australia, December 5-7, 2011.</a>
- * </ul>
- * 
- * @author Saurabh Kumar Garg
- * @since CloudSim Toolkit 3.0
- * @todo Attributes should be private
+ * A place-holder class to enable networking in a nested virtualization scenario. NetworkVm can be placed as a host entity
+ * in a NetworkDatacenter, and its sole job is to relay function calls to the underlying NetworkHost.
+ *
+ * Eventually this class will implement a proper virtual network layer.
+ *
+ * @author Remo Andreoli
+ * @since CloudSim Toolkit 7.0
  */
-public class NetworkVm extends Vm implements Comparable<Object> {
-        /**
-         * List of {@link NetworkCloudlet} of the VM.
-         */
-	public ArrayList<NetworkCloudlet> cloudletlist;
+public class NetworkVm extends Vm implements NetworkedEntity {
+    public NetworkVm(int id, int userId, double mips, int numberOfPes, int ram, long bw, long size, String vmm, CloudletScheduler cloudletScheduler, VmScheduler guestScheduler, RamProvisioner containerRamProvisioner, BwProvisioner containerBwProvisioner, List<? extends Pe> peList) {
+        super(id, userId, mips, numberOfPes, ram, bw, size, vmm, cloudletScheduler, guestScheduler, containerRamProvisioner, containerBwProvisioner, peList);
+    }
 
-        /**
-         * @todo It doesn't appear to be used.
-         */
-	int type;
+    public NetworkVm(int id, int userId, double mips, int numberOfPes, int ram, long bw, long size, String vmm, CloudletScheduler cloudletScheduler) {
+        super(id, userId, mips, numberOfPes, ram, bw, size, vmm, cloudletScheduler);
+    }
 
-        /**
-         * List of packets received by the VM.
-         */
-	public ArrayList<HostPacket> recvPktlist;
+    @Override
+    public double updateCloudletsProcessing(double currentTime, List<Double> mipsShare) {
+        double smallerTime = super.updateCloudletsProcessing(currentTime, mipsShare);
 
-        /**
-         * @todo It doesn't appear to be used.
-         */
-	public double memory;
+        // send the packets to physical host
+        sendPackets();
 
-        /**
-         * @todo It doesn't appear to be used.
-         */
-	public boolean flagfree;
+        return smallerTime;
+    }
 
-        /**
-         * The time when the VM finished to process its cloudlets.
-         */
-	public double finishtime;
+    @Override
+    public void sendPackets() {
+        // Sort of NATing: Overwrite the sender id, which may be that of a nested guest, for correct packet routing
+        // and introduce an (optional) virtualization overhead to simulate the pass-through the virtual network
+        // (nested) guest -> host
+        for (NetworkInterfaceCard nic : getNics().values()) {
+            for (HostPacket hpkt : nic.getPktsToSend()) {
+                GuestEntity sender = VmList.getById(getGuestList(), hpkt.senderGuestId);
+                if (sender != null && hpkt.senderGuestId != getId()) {
+                    hpkt.senderGuestId = getId();
+                }
 
-	public NetworkVm(
-			int id,
-			int userId,
-			double mips,
-			int pesNumber,
-			int ram,
-			long bw,
-			long size,
-			String vmm,
-			CloudletScheduler cloudletScheduler) {
-		super(id, userId, mips, pesNumber, ram, bw, size, vmm, cloudletScheduler);
+                // Nested virtualization edge-case, but locally routed packet
+                if (VmList.getById(this.getGuestList(), hpkt.receiverGuestId) != null) {
+                    getNics().get(hpkt.receiverCloudletId).getReceivedPkts().add(hpkt);
+                    nic.getPktsToSend().remove(hpkt);
+                }
 
-		cloudletlist = new ArrayList<NetworkCloudlet>();
-	}
+                hpkt.accumulatedVirtualizationOverhead += getVirtualizationOverhead();
 
-	public boolean isFree() {
-		return flagfree;
-	}
+                // Nested virtualization edge-case, but locally routed packet
+                if (VmList.getById(this.getGuestList(), hpkt.receiverGuestId) != null) {
+                    getNics().get(hpkt.receiverCloudletId).getReceivedPkts().add(hpkt);
+                    nic.getPktsToSend().remove(hpkt);
+                }
+            }
+        }
+    }
 
-	@Override
-	public int compareTo(Object arg0) {
-		NetworkVm hs = (NetworkVm) arg0;
-		if (hs.finishtime > finishtime) {
-			return -1;
-		}
-		if (hs.finishtime < finishtime) {
-			return 1;
-		}
-		return 0;
-	}
+    @Override
+    public Map<Integer, NetworkInterfaceCard> getNics() {
+        if (getHost() == null) {
+            throw new RuntimeException(getClassName()+" has not been placed");
+        }
+
+        return ((NetworkedEntity) getHost()).getNics();
+    }
+
+    @Override
+    public Switch getSwitch() {
+        if (getHost() == null) {
+            throw new RuntimeException(getClassName()+" has not been placed");
+        }
+        return ((NetworkedEntity) getHost()).getSwitch();
+    }
+
+    @Override
+    public void setSwitch(Switch sw) {
+        if (getHost() == null) {
+            throw new RuntimeException(getClassName()+"has not been placed");
+        }
+        ((NetworkedEntity) getHost()).setSwitch(sw);
+    }
 }

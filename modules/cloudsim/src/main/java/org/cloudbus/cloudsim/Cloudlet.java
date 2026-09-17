@@ -8,22 +8,55 @@
 package org.cloudbus.cloudsim;
 
 import java.text.DecimalFormat;
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
 import org.cloudbus.cloudsim.core.CloudSim;
 
 /**
- * Cloudlet is an extension to the cloudlet. It stores, despite all the
+ * Cloudlet is a user activity to be deployed on a Cloud Resource. It stores, despite all the
  * information encapsulated in the Cloudlet, the ID of the VM running it.
  *
  * @author Rodrigo N. Calheiros
  * @author Anton Beloglazov
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 1.0
- * @todo The documentation is wrong. Cloudlet isn't extending any class.
  */
 public class Cloudlet {
+    public enum CloudletStatus {
+        /** The Cloudlet has been created and added to the CloudletList object. */
+        CREATED,
+
+        /** The Cloudlet has been assigned to a CloudResource object to be executed as planned. */
+        READY,
+
+        /** The Cloudlet has moved to a Cloud node. */
+        QUEUED,
+
+        /** The Cloudlet is in execution in a Cloud node. */
+        INEXEC,
+
+        /** The Cloudlet has been executed successfully. */
+        SUCCESS,
+
+        /** The Cloudlet has failed. */
+        FAILED,
+
+        /** The Cloudlet has been canceled. */
+        CANCELED,
+
+        /** The Cloudlet has been paused. It can be resumed by changing the status into RESUMED. */
+        PAUSED,
+
+        /** The Cloudlet has been resumed from PAUSED state. */
+        RESUMED,
+
+        /** The cloudlet has failed due to a resource failure.*/
+        FAILED_RESOURCE_UNAVAILABLE;
+        public static final CloudletStatus[] values = values();
+        // @NOTE: Convert an int to enum with CloudletStatus.values[i] (mind the array bounds)
+    }
+
 
     /**
      * The cloudlet ID.
@@ -33,9 +66,11 @@ public class Cloudlet {
     /**
      * The User or Broker ID. It is advisable that broker set this ID with its
      * own ID, so that CloudResource returns to it after the execution.
-	 *
      */
     private int userId;
+
+    /** The Cloudlet UID */
+    private String uid;
 
     /**
      * The execution length of this Cloudlet (Unit: in Million Instructions
@@ -48,7 +83,6 @@ public class Cloudlet {
      * policy).
      *
      * @see #setNumberOfPes(int)
-     *
      */
     private long cloudletLength;
 
@@ -60,8 +94,8 @@ public class Cloudlet {
 
     /**
      * The output file size of this Cloudlet after execution (unit: in byte).
-     *
-     * @todo See
+     * <p>
+     * //@TODO See
      * <a href="https://groups.google.com/forum/#!topic/cloudsim/MyZ7OnrXuuI">this
      * discussion</a>
      */
@@ -77,10 +111,8 @@ public class Cloudlet {
 
     /**
      * The execution status of this Cloudlet.
-     *
-     * @todo It would be an enum, to avoid using int constants.
      */
-    private int status;
+    private CloudletStatus status;
 
     /**
      * The execution start time of this Cloudlet. With new functionalities, such
@@ -92,12 +124,14 @@ public class Cloudlet {
     /**
      * The time where this Cloudlet completes.
      */
-    private double finishTime;
+    private double execFinishTime;
 
+    /** The total time to complete this Cloudlet. */
+    private double totalCompletionTime;
     /**
      * The ID of a reservation made for this cloudlet.
-     *
-     * @todo This attribute doesn't appear to be used
+     * <p>
+     * //@TODO This attribute doesn't appear to be used
      */
     private int reservationId = -1;
 
@@ -125,14 +159,6 @@ public class Cloudlet {
     private final List<Resource> resList;
 
     /**
-     * The index of the last resource where the cloudlet was executed. If the
-     * cloudlet is migrated during its execution, this index is updated. The
-     * value -1 indicates the cloudlet has not been executed
-         yet.
-     */
-    private int index;
-
-    /**
      * The classType or priority of this Cloudlet for scheduling on a resource.
      */
     private int classType;
@@ -147,65 +173,18 @@ public class Cloudlet {
      */
     private DecimalFormat num;
 
-    // //////////////////////////////////////////
-    // Below are CONSTANTS attributes
     /**
-     * The Cloudlet has been created and added to the CloudletList object.
+     * The id of the guest entity that is planned to execute the cloudlet.
      */
-    public static final int CREATED = 0;
+    protected int guestId;
 
     /**
-     * The Cloudlet has been assigned to a CloudResource object to be executed
-     * as planned.
+     * The id of the container is planned to execute the cloudlet.
+     * It may be -1, if containers are not in use
      */
-    public static final int READY = 1;
-
-    /**
-     * The Cloudlet has moved to a Cloud node.
-     */
-    public static final int QUEUED = 2;
-
-    /**
-     * The Cloudlet is in execution in a Cloud node.
-     */
-    public static final int INEXEC = 3;
-
-    /**
-     * The Cloudlet has been executed successfully.
-     */
-    public static final int SUCCESS = 4;
-
-    /**
-     * The Cloudlet has failed.
-     */
-    public static final int FAILED = 5;
-
-    /**
-     * The Cloudlet has been canceled.
-     */
-    public static final int CANCELED = 6;
-
-    /**
-     * The Cloudlet has been paused. It can be resumed by changing the status
-     * into <tt>RESUMED</tt>.
-     */
-    public static final int PAUSED = 7;
-
-    /**
-     * The Cloudlet has been resumed from <tt>PAUSED</tt> state.
-     */
-    public static final int RESUMED = 8;
-
-    /**
-     * The cloudlet has failed due to a resource failure.
-     */
-    public static final int FAILED_RESOURCE_UNAVAILABLE = 9;
-
-    /**
-     * The id of the vm that is planned to execute the cloudlet.
-     */
-    protected int vmId;
-
+    // @TODO: to be deprecated in favor of guestId
+    protected int containerId = -1;
+    
     /**
      * The cost of each byte of bandwidth (bw) consumed.
      */
@@ -249,18 +228,17 @@ public class Cloudlet {
      * file sizes should be greater than or equal to 1. By default this
      * constructor sets the history of this object.
      *
-     * @param cloudletId the unique ID of this Cloudlet
-     * @param cloudletLength the length or size (in MI) of this cloudlet to be
-     * executed in a PowerDatacenter
-     * @param cloudletFileSize the file size (in byte) of this cloudlet
-     * <tt>BEFORE</tt> submitting to a Datacenter
-     * @param cloudletOutputSize the file size (in byte) of this cloudlet
-     * <tt>AFTER</tt> finish executing by a Datacenter
-     * @param pesNumber the pes number
+     * @param cloudletId          the unique ID of this Cloudlet
+     * @param cloudletLength      the length or size (in MI) of this cloudlet to be
+     *                            executed in a PowerDatacenter
+     * @param cloudletFileSize    the file size (in byte) of this cloudlet
+     *                            <tt>BEFORE</tt> submitting to a Datacenter
+     * @param cloudletOutputSize  the file size (in byte) of this cloudlet
+     *                            <tt>AFTER</tt> finish executing by a Datacenter
+     * @param pesNumber           the pes number
      * @param utilizationModelCpu the utilization model of cpu
      * @param utilizationModelRam the utilization model of ram
-     * @param utilizationModelBw the utilization model of bw
-     *
+     * @param utilizationModelBw  the utilization model of bw
      * @pre cloudletID >= 0
      * @pre cloudletLength >= 0.0
      * @pre cloudletFileSize >= 1
@@ -286,30 +264,29 @@ public class Cloudlet {
                 utilizationModelRam,
                 utilizationModelBw,
                 false);
-        vmId = -1;        
+        guestId = -1;
         accumulatedBwCost = 0;
         costPerBw = 0;
-        requiredFiles = new LinkedList<String>();
+        requiredFiles = new LinkedList<>();
     }
 
     /**
      * Allocates a new Cloudlet object. The Cloudlet length, input and output
      * file sizes should be greater than or equal to 1.
      *
-     * @param cloudletId the unique ID of this cloudlet
-     * @param cloudletLength the length or size (in MI) of this cloudlet to be
-     * executed in a PowerDatacenter
-     * @param cloudletFileSize the file size (in byte) of this cloudlet
-     * <tt>BEFORE</tt> submitting to a PowerDatacenter
-     * @param cloudletOutputSize the file size (in byte) of this cloudlet
-     * <tt>AFTER</tt> finish executing by a PowerDatacenter
-     * @param record record the history of this object or not
-     * @param fileList list of files required by this cloudlet
-     * @param pesNumber the pes number
+     * @param cloudletId          the unique ID of this cloudlet
+     * @param cloudletLength      the length or size (in MI) of this cloudlet to be
+     *                            executed in a PowerDatacenter
+     * @param cloudletFileSize    the file size (in byte) of this cloudlet
+     *                            <tt>BEFORE</tt> submitting to a PowerDatacenter
+     * @param cloudletOutputSize  the file size (in byte) of this cloudlet
+     *                            <tt>AFTER</tt> finish executing by a PowerDatacenter
+     * @param record              record the history of this object or not
+     * @param fileList            list of files required by this cloudlet
+     * @param pesNumber           the pes number
      * @param utilizationModelCpu the utilization model of cpu
      * @param utilizationModelRam the utilization model of ram
-     * @param utilizationModelBw the utilization model of bw
-     *
+     * @param utilizationModelBw  the utilization model of bw
      * @pre cloudletID >= 0
      * @pre cloudletLength >= 0.0
      * @pre cloudletFileSize >= 1
@@ -337,7 +314,7 @@ public class Cloudlet {
                 utilizationModelRam,
                 utilizationModelBw,
                 record);
-        vmId = -1;
+        guestId = -1;
         accumulatedBwCost = 0.0;
         costPerBw = 0.0;
 
@@ -349,19 +326,18 @@ public class Cloudlet {
      * file sizes should be greater than or equal to 1. By default this
      * constructor sets the history of this object.
      *
-     * @param cloudletId the unique ID of this Cloudlet
-     * @param cloudletLength the length or size (in MI) of this cloudlet to be
-     * executed in a PowerDatacenter
-     * @param cloudletFileSize the file size (in byte) of this cloudlet
-     * <tt>BEFORE</tt> submitting to a PowerDatacenter
-     * @param cloudletOutputSize the file size (in byte) of this cloudlet
-     * <tt>AFTER</tt> finish executing by a PowerDatacenter
-     * @param fileList list of files required by this cloudlet
-     * @param pesNumber the pes number
+     * @param cloudletId          the unique ID of this Cloudlet
+     * @param cloudletLength      the length or size (in MI) of this cloudlet to be
+     *                            executed in a PowerDatacenter
+     * @param cloudletFileSize    the file size (in byte) of this cloudlet
+     *                            <tt>BEFORE</tt> submitting to a PowerDatacenter
+     * @param cloudletOutputSize  the file size (in byte) of this cloudlet
+     *                            <tt>AFTER</tt> finish executing by a PowerDatacenter
+     * @param fileList            list of files required by this cloudlet
+     * @param pesNumber           the pes number
      * @param utilizationModelCpu the utilization model of cpu
      * @param utilizationModelRam the utilization model of ram
-     * @param utilizationModelBw the utilization model of bw
-     *
+     * @param utilizationModelBw  the utilization model of bw
      * @pre cloudletID >= 0
      * @pre cloudletLength >= 0.0
      * @pre cloudletFileSize >= 1
@@ -388,7 +364,7 @@ public class Cloudlet {
                 utilizationModelRam,
                 utilizationModelBw,
                 false);
-        vmId = -1;
+        guestId = -1;
         accumulatedBwCost = 0.0;
         costPerBw = 0.0;
 
@@ -399,19 +375,18 @@ public class Cloudlet {
      * Allocates a new Cloudlet object. The Cloudlet length, input and output
      * file sizes should be greater than or equal to 1.
      *
-     * @param cloudletId the unique ID of this cloudlet
-     * @param cloudletLength the length or size (in MI) of this cloudlet to be
-     * executed in a PowerDatacenter
-     * @param cloudletFileSize the file size (in byte) of this cloudlet
-     * <tt>BEFORE</tt> submitting to a PowerDatacenter
-     * @param cloudletOutputSize the file size (in byte) of this cloudlet
-     * <tt>AFTER</tt> finish executing by a PowerDatacenter
-     * @param record record the history of this object or not
-     * @param pesNumber the pes number
+     * @param cloudletId          the unique ID of this cloudlet
+     * @param cloudletLength      the length or size (in MI) of this cloudlet to be
+     *                            executed in a PowerDatacenter
+     * @param cloudletFileSize    the file size (in byte) of this cloudlet
+     *                            <tt>BEFORE</tt> submitting to a PowerDatacenter
+     * @param cloudletOutputSize  the file size (in byte) of this cloudlet
+     *                            <tt>AFTER</tt> finish executing by a PowerDatacenter
+     * @param record              record the history of this object or not
+     * @param pesNumber           the pes number
      * @param utilizationModelCpu the utilization model of cpu
      * @param utilizationModelRam the utilization model of ram
-     * @param utilizationModelBw the utilization model of bw
-     *
+     * @param utilizationModelBw  the utilization model of bw
      * @pre cloudletID >= 0
      * @pre cloudletLength >= 0.0
      * @pre cloudletFileSize >= 1
@@ -429,11 +404,12 @@ public class Cloudlet {
             final UtilizationModel utilizationModelBw,
             final boolean record) {
         userId = -1;          // to be set by a Broker or user
-        status = CREATED;
+        status = CloudletStatus.CREATED;
         this.cloudletId = cloudletId;
         numberOfPes = pesNumber;
+
         execStartTime = 0.0;
-        finishTime = -1.0;    // meaning this Cloudlet hasn't finished yet
+        execFinishTime = -1.0;    // meaning this Cloudlet hasn't finished yet
         classType = 0;
         netToS = 0;
 
@@ -442,36 +418,39 @@ public class Cloudlet {
         this.cloudletFileSize = Math.max(1, cloudletFileSize);
         this.cloudletOutputSize = Math.max(1, cloudletOutputSize);
 
-		// Normally, a Cloudlet is only executed on a resource without being
+        // Normally, a Cloudlet is only executed on a resource without being
         // migrated to others. Hence, to reduce memory consumption, set the
         // size of this ArrayList to be less than the default one.
-        resList = new ArrayList<Resource>(2);
-        index = -1;
+        resList = new LinkedList<>();
         this.record = record;
 
-        vmId = -1;
+        guestId = -1;
         accumulatedBwCost = 0.0;
         costPerBw = 0.0;
 
-        requiredFiles = new LinkedList<String>();
+        requiredFiles = new LinkedList<>();
 
         setUtilizationModelCpu(utilizationModelCpu);
         setUtilizationModelRam(utilizationModelRam);
         setUtilizationModelBw(utilizationModelBw);
+        updateUid();
     }
 
-	// ////////////////////// INTERNAL CLASS ///////////////////////////////////
+    /** Backward compatibility with ResCloudlet class in CloudSim6G */
+    @Deprecated
+    public Cloudlet getCloudlet() { return this; }
+
+    // ////////////////////// INTERNAL CLASS ///////////////////////////////////
+
     /**
      * Internal class that keeps track of Cloudlet's movement in different
      * CloudResources. Each time a cloudlet is run on a given VM, the cloudlet's
      * execution history on each VM is registered at {@link Cloudlet#resList}
      */
-    private static class Resource {
+    public static class Resource {
 
-        /**
-         * Cloudlet's submission (arrival) time to a CloudResource.
-         */
-        public double submissionTime = 0.0;
+        /** Cloudlet's submission (arrival) time to a CloudResource. */
+        public double arrivalTime = 0.0;
 
         /**
          * The time this Cloudlet resides in a CloudResource (from arrival time
@@ -479,34 +458,59 @@ public class Cloudlet {
          */
         public double wallClockTime = 0.0;
 
-        /**
-         * The total time the Cloudlet spent being executed in a CloudResource.
-         */
+        /** The total time the Cloudlet spent being executed in a CloudResource. */
         public double actualCPUTime = 0.0;
 
-        /**
-         * Cost per second a CloudResource charge to execute this Cloudlet.
-         */
+        /** Cost per second a CloudResource charge to execute this Cloudlet. */
         public double costPerSec = 0.0;
 
-        /**
-         * Cloudlet's length finished so far.
-         */
-        public long finishedSoFar = 0;
+        /** Cloudlet's length finished so far on the CloudResource. */
+        public long cloudletFinishedSoFar = 0;
 
-        /**
-         * a CloudResource id.
-         */
+        /** CloudResource id. */
         public int resourceId = -1;
 
-        /**
-         * a CloudResource name.
-         */
+        /** CloudResource name. */
         public String resourceName = null;
 
     }
 
-	// ////////////////////// End of Internal Class //////////////////////////
+    // ////////////////////// End of Internal Class //////////////////////////
+
+    /**
+     * Update the cloudlet (override this to customise the cloudlet behavior).
+     * @param info a custom object class you may need to implement the update logic
+     * @return true if the update causes a variation in cloudlet length
+     */
+
+    public boolean updateCloudlet(Object info) {
+        return true;
+    }
+
+    /**
+     * Finalizes all relevant information before <tt>exiting</tt> the CloudResource entity. This
+     * method sets the final data of:
+     * <ul>
+     * <li>wall clock time, i.e. the time of this Cloudlet resides in a CloudResource (from arrival
+     * time until departure time).
+     * <li>actual CPU time, i.e. the total execution time of this Cloudlet in a CloudResource.
+     * <li>Cloudlet's finished time so far
+     * </ul>
+     *
+     * @pre $none
+     * @post $none
+     */
+    public void finalizeCloudlet() {
+        // Sets the wall clock time and actual CPU time
+        double wallClockTime = CloudSim.clock() - getSubmissionTime();
+        setExecParam(wallClockTime, totalCompletionTime);
+
+        //if (cloudlet.getCloudletTotalLength() * Consts.MILLION < cloudletFinishedSoFar) {
+        if (getStatus() == Cloudlet.CloudletStatus.SUCCESS) {
+            setCloudletFinishedSoFar(getCloudletLength());
+        }
+    }
+
     /**
      * Sets the id of the reservation made for this cloudlet.
      *
@@ -540,10 +544,7 @@ public class Cloudlet {
      * <tt>false</tt> otherwise
      */
     public boolean hasReserved() {
-        if (reservationId == -1) {
-            return false;
-        }
-        return true;
+        return reservationId != -1;
     }
 
     /**
@@ -553,12 +554,11 @@ public class Cloudlet {
      * Pe).
      *
      * @param cloudletLength the length or size (in MI) of this Cloudlet to be
-     * executed in a CloudResource
+     *                       executed in a CloudResource
      * @return <tt>true</tt> if it is successful, <tt>false</tt> otherwise
-     *
-     * @see #getCloudletTotalLength() }
      * @pre cloudletLength > 0
      * @post $none
+     * @see #getCloudletTotalLength() }
      */
     public boolean setCloudletLength(final long cloudletLength) {
         if (cloudletLength <= 0) {
@@ -574,13 +574,13 @@ public class Cloudlet {
      * network.
      *
      * @param netServiceLevel determines the type of service (ToS) this cloudlet
-     * receives in the network (applicable to selected PacketScheduler class
-     * only)
+     *                        receives in the network (applicable to selected PacketScheduler class
+     *                        only)
      * @return <code>true</code> if successful.
      * @pre netServiceLevel >= 0
      * @post $none
-     *
-     * @todo The name of the setter is inconsistent with the attribute name,
+     * <p>
+     * //@TODO The name of the setter is inconsistent with the attribute name,
      * what might be misinterpreted by other developers.
      */
     public boolean setNetServiceLevel(final int netServiceLevel) {
@@ -600,7 +600,7 @@ public class Cloudlet {
      * @return the network service level
      * @pre $none
      * @post $none
-     * @todo The name of the getter is inconsistent with the attribute name,
+     * //@TODO The name of the getter is inconsistent with the attribute name,
      * what might be misinterpreted by other developers.
      */
     public int getNetServiceLevel() {
@@ -616,12 +616,12 @@ public class Cloudlet {
      * @post $none
      */
     public double getWaitingTime() {
-        if (index == -1) {
+        if (resList.isEmpty()) {
             return 0;
         }
 
         // use the latest resource submission time
-        final double subTime = resList.get(index).submissionTime;
+        final double subTime = resList.getLast().arrivalTime;
         return execStartTime - subTime;
     }
 
@@ -631,7 +631,6 @@ public class Cloudlet {
      *
      * @param classType classType of this Cloudlet
      * @return <tt>true</tt> if it is successful, <tt>false</tt> otherwise
-     *
      * @pre classType > 0
      * @post $none
      */
@@ -665,7 +664,6 @@ public class Cloudlet {
      *
      * @param numberOfPes number of Pe
      * @return <tt>true</tt> if it is successful, <tt>false</tt> otherwise
-     *
      * @pre numPE > 0
      * @post $none
      */
@@ -681,7 +679,6 @@ public class Cloudlet {
      * Gets the number of PEs required to run this Cloudlet.
      *
      * @return number of PEs
-     *
      * @pre $none
      * @post $none
      */
@@ -720,16 +717,11 @@ public class Cloudlet {
      * @post $result >= 0.0
      */
     public long getCloudletFinishedSoFar() {
-        if (index == -1) {
-            return cloudletLength;
+        if (resList.isEmpty()) {
+            return 0;
         }
 
-        final long finish = resList.get(index).finishedSoFar;
-        if (finish > cloudletLength) {
-            return cloudletLength;
-        }
-
-        return finish;
+        return Math.min(resList.getLast().cloudletFinishedSoFar, getCloudletTotalLength()*Consts.MILLION);
     }
 
     /**
@@ -741,19 +733,21 @@ public class Cloudlet {
      * @post $none
      */
     public boolean isFinished() {
-        if (index == -1) {
+        if (resList.isEmpty()) {
             return false;
         }
-
-        boolean completed = false;
-
         // if result is 0 or -ve then this Cloudlet has finished
-        final long finish = resList.get(index).finishedSoFar;
-        final long result = cloudletLength - finish;
-        if (result <= 0.0) {
-            completed = true;
-        }
-        return completed;
+        return getRemainingCloudletLength() <= 0.0;
+    }
+    /**
+     * Updates the length of cloudlet that has already been completed.
+     *
+     * @param miLength cloudlet length in Instructions (I)
+     * @pre miLength >= 0.0
+     * @post $none
+     */
+    public void updateCloudletFinishedSoFar(long miLength) {
+        setCloudletFinishedSoFar(getCloudletFinishedSoFar() + miLength);
     }
 
     /**
@@ -762,19 +756,18 @@ public class Cloudlet {
      * cancel or to move this Cloudlet into different CloudResources.
      *
      * @param length length of this Cloudlet
-     * @see gridsim.AllocPolicy
-     * @see gridsim.ResCloudlet
      * @pre length >= 0.0
      * @post $none
+     * @see VmAllocationPolicy
+     * @see Cloudlet
      */
     public void setCloudletFinishedSoFar(final long length) {
         // if length is -ve then ignore
-        if (length < 0.0 || index < 0) {
+        if (length < 0.0 || resList.isEmpty()) {
             return;
         }
 
-        final Resource res = resList.get(index);
-        res.finishedSoFar = length;
+        resList.getLast().cloudletFinishedSoFar = length;
 
         if (record) {
             write("Sets the length's finished so far to " + length);
@@ -792,20 +785,10 @@ public class Cloudlet {
      */
     public void setUserId(final int id) {
         userId = id;
+        updateUid();
         if (record) {
             write("Assigns the Cloudlet to " + CloudSim.getEntityName(id) + " (ID #" + id + ")");
         }
-    }
-
-    /**
-     * Gets the user or owner ID of this Cloudlet.
-     *
-     * @return the user ID or <tt>-1</tt> if the user ID has not been set before
-     * @pre $none
-     * @post $result >= -1
-     */
-    public int getUserId() {
-        return userId;
     }
 
     /**
@@ -816,11 +799,18 @@ public class Cloudlet {
      * @post $result >= -1
      */
     public int getResourceId() {
-        if (index == -1) {
+        if (resList.isEmpty()) {
             return -1;
         }
-        return resList.get(index).resourceId;
+        return resList.getLast().resourceId;
     }
+
+    public double getExecFinishTime() {
+        return execFinishTime;
+    }
+
+    @Deprecated
+    public double getFinishTime() { return getExecFinishTime(); }
 
     /**
      * Gets the input file size of this Cloudlet <tt>BEFORE</tt> submitting to a
@@ -850,13 +840,12 @@ public class Cloudlet {
      * Sets the resource parameters for which the Cloudlet is going to be
      * executed. From the second time this method is called, every call make the
      * cloudlet to be migrated to the indicated resource.<br>
-     *
+     * <p>
      * NOTE: This method <tt>should</tt> be called only by a resource entity,
      * not the user or owner of this Cloudlet.
      *
      * @param resourceID the CloudResource ID
-     * @param cost the cost running this CloudResource per second
-     *
+     * @param cost       the cost running this CloudResource per second
      * @pre resourceID >= 0
      * @pre cost > 0.0
      * @post $none
@@ -870,17 +859,17 @@ public class Cloudlet {
         // add into a list if moving to a new grid resource
         resList.add(res);
 
-        if (index == -1 && record) {
+        if (resList.size() == 1 && record) {
             write("Allocates this Cloudlet to " + res.resourceName + " (ID #" + resourceID
                     + ") with cost = $" + cost + "/sec");
         } else if (record) {
-            final int id = resList.get(index).resourceId;
-            final String name = resList.get(index).resourceName;
+            final int id = resList.getLast().resourceId;
+            final String name = resList.getLast().resourceName;
             write("Moves Cloudlet from " + name + " (ID #" + id + ") to " + res.resourceName + " (ID #"
                     + resourceID + ") with cost = $" + cost + "/sec");
         }
 
-        index++;  // initially, index = -1
+        setSubmissionTime(CloudSim.clock());
     }
 
     /**
@@ -891,12 +880,11 @@ public class Cloudlet {
      * @post $none
      */
     public void setSubmissionTime(final double clockTime) {
-        if (clockTime < 0.0 || index < 0) {
+        if (clockTime < 0.0 || resList.isEmpty()) {
             return;
         }
 
-        final Resource res = resList.get(index);
-        res.submissionTime = clockTime;
+        resList.getLast().arrivalTime = clockTime;
 
         if (record) {
             write("Sets the submission time to " + num.format(clockTime));
@@ -912,11 +900,16 @@ public class Cloudlet {
      * @post $result >= 0.0
      */
     public double getSubmissionTime() {
-        if (index == -1) {
+        if (resList.isEmpty()) {
             return 0.0;
         }
-        return resList.get(index).submissionTime;
+        return resList.getLast().arrivalTime;
     }
+
+    @Deprecated
+    public double getCloudletArrivalTime() { return getSubmissionTime(); }
+    @Deprecated
+    public double getArrivalTime() { return getSubmissionTime(); }
 
     /**
      * Sets the execution start time of this Cloudlet inside a CloudResource.
@@ -937,39 +930,26 @@ public class Cloudlet {
     }
 
     /**
-     * Gets the latest execution start time.
-     *
-     * @return the latest execution start time
-     * @pre $none
-     * @post $result >= 0.0
-     */
-    public double getExecStartTime() {
-        return execStartTime;
-    }
-
-    /**
      * Sets the Cloudlet's execution parameters. These parameters are set by the
      * CloudResource before departure or sending back to the original Cloudlet's
      * owner.
      *
-     * @param wallTime the time of this Cloudlet resides in a CloudResource
-     * (from arrival time until departure time).
+     * @param wallTime   the time of this Cloudlet resides in a CloudResource
+     *                   (from arrival time until departure time).
      * @param actualTime the total execution time of this Cloudlet in a
-     * CloudResource.
-     *
-     * @see Resource#wallClockTime
-     * @see Resource#actualCPUTime
-     *
+     *                   CloudResource.
      * @pre wallTime >= 0.0
      * @pre actualTime >= 0.0
      * @post $none
+     * @see Resource#wallClockTime
+     * @see Resource#actualCPUTime
      */
     public void setExecParam(final double wallTime, final double actualTime) {
-        if (wallTime < 0.0 || actualTime < 0.0 || index < 0) {
+        if (wallTime < 0.0 || actualTime < 0.0 || resList.isEmpty()) {
             return;
         }
 
-        final Resource res = resList.get(index);
+        final Resource res = resList.getLast();
         res.wallClockTime = wallTime;
         res.actualCPUTime = actualTime;
 
@@ -979,53 +959,73 @@ public class Cloudlet {
         }
     }
 
+    public CloudletStatus getStatus() { return status; }
+
     /**
-     * Sets the execution status code of this Cloudlet.
+     * Sets the execution status of the Cloudlet.
      *
-     * @param newStatus the status code of this Cloudlet
-     * @throws Exception Invalid range of Cloudlet status
-     * @pre newStatus >= 0 && newStatus <= 8
-	 * @
-     * post $none
-     *
-     * @todo It has to throw an specific (unckecked) exception
+     * @param status the Cloudlet status
+     * @return <tt>true</tt> if the new status has been set, <tt>false</tt> otherwise
+     * @pre status >= 0
+     * @post $none
      */
-    public void setCloudletStatus(final int newStatus) throws Exception {
-        // if the new status is same as current one, then ignore the rest
-        if (status == newStatus) {
-            return;
+    public boolean updateStatus(final CloudletStatus status) {
+        // gets Cloudlet's previous status
+        Cloudlet.CloudletStatus prevStatus = getStatus();
+
+        // if the status of a Cloudlet is the same as last time, then ignore
+        if (prevStatus == status) {
+            return false;
         }
 
-        // throws an exception if the new status is outside the range
-        if (newStatus < Cloudlet.CREATED || newStatus > Cloudlet.FAILED_RESOURCE_UNAVAILABLE) {
-            throw new Exception(
-                    "Cloudlet.setCloudletStatus() : Error - Invalid integer range for Cloudlet status.");
+        // sets Cloudlet's current status
+        if (status == CloudletStatus.SUCCESS) {
+            execFinishTime = CloudSim.clock();
         }
 
-        if (newStatus == Cloudlet.SUCCESS) {
-            finishTime = CloudSim.clock();
-        }
+        double clock = CloudSim.clock();
+        this.status = status;
 
         if (record) {
-            write("Sets Cloudlet status from " + getCloudletStatusString() + " to "
-                    + Cloudlet.getStatusString(newStatus));
+            write("Sets Cloudlet status from " + getCloudletStatusString() + " to " + status.toString());
         }
 
-        status = newStatus;
+        // if a previous Cloudlet status is INEXEC
+        if (prevStatus == Cloudlet.CloudletStatus.INEXEC) {
+            // and current status is either CANCELED, PAUSED or SUCCESS
+            if (status == Cloudlet.CloudletStatus.CANCELED || status == Cloudlet.CloudletStatus.PAUSED || status == Cloudlet.CloudletStatus.SUCCESS) {
+                // then update the Cloudlet completion time
+                totalCompletionTime += (clock - execStartTime);
+                return true;
+            }
+        }
+
+        if (prevStatus == Cloudlet.CloudletStatus.RESUMED && status == Cloudlet.CloudletStatus.SUCCESS) {
+            // then update the Cloudlet completion time
+            totalCompletionTime += (clock - execStartTime);
+            return true;
+        }
+
+        // if a Cloudlet is now in execution
+        if (status == Cloudlet.CloudletStatus.INEXEC || (prevStatus == Cloudlet.CloudletStatus.PAUSED && status == Cloudlet.CloudletStatus.RESUMED)) {
+            setExecStartTime(clock);
+            return true;
+        }
+
+        return false;
     }
 
-    /**
-     * Gets the status code of this Cloudlet.
-     *
-     * @return the status code of this Cloudlet
-     * @pre $none
-     * @post $result >= 0
-     * @deprecated Use the getter {@link #getStatus()} instead
-     */
     @Deprecated
-    public int getCloudletStatus() {
-        return status;
-    }
+    public boolean setStatus(CloudletStatus newStatus) { return updateStatus(newStatus); }
+    @Deprecated
+    public void setCloudletStatus(final CloudletStatus newStatus) { updateStatus(newStatus); }
+
+    public int getUserId() { return userId; }
+
+    public int getCloudletId() { return cloudletId; }
+
+    public int getContainerId() { return containerId; }
+    public void setContainerId(int containerId) { this.containerId = containerId; }
 
     /**
      * Gets the string representation of the current Cloudlet status code.
@@ -1036,66 +1036,7 @@ public class Cloudlet {
      * @post $none
      */
     public String getCloudletStatusString() {
-        return Cloudlet.getStatusString(status);
-    }
-
-    /**
-     * Gets the string representation of the given Cloudlet status code.
-     *
-     * @param status the Cloudlet status code
-     * @return the Cloudlet status code as a string or <tt>null</tt> if the
-     * status code is unknown
-     * @pre $none
-     * @post $none
-     */
-    public static String getStatusString(final int status) {
-        String statusString = null;
-        switch (status) {
-            case Cloudlet.CREATED:
-                statusString = "Created";
-                break;
-
-            case Cloudlet.READY:
-                statusString = "Ready";
-                break;
-
-            case Cloudlet.INEXEC:
-                statusString = "InExec";
-                break;
-
-            case Cloudlet.SUCCESS:
-                statusString = "Success";
-                break;
-
-            case Cloudlet.QUEUED:
-                statusString = "Queued";
-                break;
-
-            case Cloudlet.FAILED:
-                statusString = "Failed";
-                break;
-
-            case Cloudlet.CANCELED:
-                statusString = "Canceled";
-                break;
-
-            case Cloudlet.PAUSED:
-                statusString = "Paused";
-                break;
-
-            case Cloudlet.RESUMED:
-                statusString = "Resumed";
-                break;
-
-            case Cloudlet.FAILED_RESOURCE_UNAVAILABLE:
-                statusString = "Failed_resource_unavailable";
-                break;
-
-            default:
-                break;
-        }
-
-        return statusString;
+        return status.toString();
     }
 
     /**
@@ -1113,21 +1054,21 @@ public class Cloudlet {
      * Gets the total length (across all PEs) of this Cloudlet. It considers the
      * {@link #cloudletLength} of the cloudlet to be executed in each Pe and the
      * {@link #numberOfPes}.<br/>
-     *
+     * <p>
      * For example, setting the cloudletLenght as 10000 MI and
      * {@link #numberOfPes} to 4, each Pe will execute 10000 MI. Thus, the
      * entire cloudlet has a total length of 40000 MI.
      *
-     *
      * @return the total length of this Cloudlet
-     *
-     * @see #setCloudletLength(long)
      * @pre $none
      * @post $result >= 0.0
+     * @see #setCloudletLength(long)
      */
     public long getCloudletTotalLength() {
         return getCloudletLength() * getNumberOfPes();
     }
+
+    public double getExecStartTime() { return execStartTime; }
 
     /**
      * Gets the cost/sec of running the Cloudlet in the latest CloudResource.
@@ -1138,10 +1079,10 @@ public class Cloudlet {
      * @post $result >= 0.0
      */
     public double getCostPerSec() {
-        if (index == -1) {
+        if (resList.isEmpty()) {
             return 0.0;
         }
-        return resList.get(index).costPerSec;
+        return resList.getLast().costPerSec;
     }
 
     /**
@@ -1153,10 +1094,10 @@ public class Cloudlet {
      * @post $result >= 0.0
      */
     public double getWallClockTime() {
-        if (index == -1) {
+        if (resList.isEmpty()) {
             return 0.0;
         }
-        return resList.get(index).wallClockTime;
+        return resList.getLast().wallClockTime;
     }
 
     /**
@@ -1250,9 +1191,31 @@ public class Cloudlet {
     public long getCloudletFinishedSoFar(final int resId) {
         Resource resource = getResourceById(resId);
         if (resource != null) {
-            return resource.finishedSoFar;
+            return resource.cloudletFinishedSoFar;
         }
         return 0;
+    }
+
+    /**
+     * Gets the remaining cloudlet length that has to be execute yet,
+     * considering the {@link #getCloudletTotalLength()}.
+     *
+     * @return cloudlet length
+     * @pre $none
+     * @post $result >= 0
+     */
+    public long getRemainingCloudletLength() {
+        // Check if Cloudlet is finished
+        if (getCloudletLength() == getCloudletFinishedSoFar())
+            return 0;
+
+        long length = getCloudletTotalLength()*Consts.MILLION - getCloudletFinishedSoFar();
+
+        // Remaining Cloudlet length can't be negative number.
+        if (length <= 0) {
+            return 0;
+        }
+        return length/Consts.MILLION;
     }
 
     /**
@@ -1267,7 +1230,7 @@ public class Cloudlet {
     public double getSubmissionTime(final int resId) {
         Resource resource = getResourceById(resId);
         if (resource != null) {
-            return resource.submissionTime;
+            return resource.arrivalTime;
         }
         return 0.0;
     }
@@ -1321,19 +1284,8 @@ public class Cloudlet {
         return null;
     }
 
-    /**
-     * Gets the finish time of this Cloudlet in a CloudResource.
-     *
-     * @return the finish or completion time of this Cloudlet or <tt>-1</tt> if
-     * not finished yet.
-     * @pre $none
-     * @post $result >= -1
-     */
-    public double getFinishTime() {
-        return finishTime;
-    }
+    // //////////////////////// PROTECTED METHODS //////////////////////////////
 
-	// //////////////////////// PROTECTED METHODS //////////////////////////////
     /**
      * Writes this particular history transaction of this Cloudlet into a log.
      *
@@ -1353,62 +1305,17 @@ public class Cloudlet {
             history = new StringBuffer(1000);
             history.append("Time below denotes the simulation time.");
             history.append(System.getProperty("line.separator"));
-            history.append("Time (sec)       Description Cloudlet #" + cloudletId);
+            history.append("Time (sec)       Description Cloudlet #").append(cloudletId);
             history.append(System.getProperty("line.separator"));
             history.append("------------------------------------------");
             history.append(System.getProperty("line.separator"));
             history.append(num.format(CloudSim.clock()));
-            history.append("   Creates Cloudlet ID #" + cloudletId);
+            history.append("   Creates Cloudlet ID #").append(cloudletId);
             history.append(System.getProperty("line.separator"));
         }
 
         history.append(num.format(CloudSim.clock()));
-        history.append("   " + str + newline);
-    }
-
-    /**
-     * Get the status of the Cloudlet.
-     *
-     * @return status of the Cloudlet
-     * @pre $none
-     * @post $none
-     *
-     */
-    public int getStatus() {
-        return status;
-    }
-
-    /**
-     * Gets the ID of this Cloudlet.
-     *
-     * @return Cloudlet Id
-     * @pre $none
-     * @post $none
-     */
-    public int getCloudletId() {
-        return cloudletId;
-    }
-
-    /**
-     * Gets the ID of the VM that will run this Cloudlet.
-     *
-     * @return VM Id, -1 if the Cloudlet was not assigned to a VM
-     * @pre $none
-     * @post $none
-     */
-    public int getVmId() {
-        return vmId;
-    }
-
-    /**
-     * Sets the ID of the VM that will run this Cloudlet.
-     *
-     * @param vmId the vm id
-     * @pre id >= 0
-     * @post $none
-     */
-    public void setVmId(final int vmId) {
-        this.vmId = vmId;
+        history.append("   ").append(str).append(newline);
     }
 
     /**
@@ -1419,7 +1326,7 @@ public class Cloudlet {
      * @post $none
      */
     public double getActualCPUTime() {
-        return getFinishTime() - getExecStartTime();
+        return getExecFinishTime() - getExecStartTime();
     }
 
     /**
@@ -1430,8 +1337,7 @@ public class Cloudlet {
      *
      * @param resourceID the CloudResource ID
      * @param costPerCPU the cost per second of running this Cloudlet
-     * @param costPerBw the cost per byte of data transfer to the Datacenter
-     *
+     * @param costPerBw  the cost per byte of data transfer to the Datacenter
      * @pre resourceID >= 0
      * @pre cost > 0.0
      * @post $none
@@ -1452,7 +1358,7 @@ public class Cloudlet {
      * @post $result >= 0.0
      */
     public double getProcessingCost() {
-		// cloudlet cost: execution cost...
+        // cloudlet cost: execution cost...
         // double cost = getProcessingCost();
         double cost = 0;
         // ...plus input data transfer cost...
@@ -1462,24 +1368,7 @@ public class Cloudlet {
         return cost;
     }
 
-	// Data cloudlet
-    /**
-     * Gets the required files.
-     *
-     * @return the required files
-     */
-    public List<String> getRequiredFiles() {
-        return requiredFiles;
-    }
-
-    /**
-     * Sets the required files.
-     *
-     * @param requiredFiles the new required files
-     */
-    protected void setRequiredFiles(final List<String> requiredFiles) {
-        this.requiredFiles = requiredFiles;
-    }
+    // Data cloudlet
 
     /**
      * Adds the required filename to the list.
@@ -1490,7 +1379,7 @@ public class Cloudlet {
     public boolean addRequiredFile(final String fileName) {
         // if the list is empty
         if (getRequiredFiles() == null) {
-            setRequiredFiles(new LinkedList<String>());
+            setRequiredFiles(new LinkedList<>());
         }
 
         // then check whether filename already exists or not
@@ -1542,13 +1431,18 @@ public class Cloudlet {
      * @return <tt>true</tt> if required, <tt>false</tt> otherwise
      */
     public boolean requiresFiles() {
-        boolean result = false;
-        if (getRequiredFiles() != null && getRequiredFiles().size() > 0) {
-            result = true;
-        }
-
-        return result;
+        return getRequiredFiles() != null && !getRequiredFiles().isEmpty();
     }
+
+    public int getGuestId() { return guestId; }
+
+    @Deprecated
+    public int getVmId() {return getGuestId(); }
+
+    public void setGuestId(int guestId) { this.guestId = guestId; }
+
+    @Deprecated
+    public void setVmId(int vmId) { setGuestId(vmId); }
 
     /**
      * Gets the utilization model of cpu.
@@ -1605,6 +1499,20 @@ public class Cloudlet {
     }
 
     /**
+     * Get am Unique Identifier (UID) of the cloudlet.
+     *
+     * @return The UID
+     */
+    public String getUid() {
+        return uid;
+    }
+
+    /** update uid after change of cloudletId or userId */
+    private void updateUid() {
+        uid = getUserId() + "-" + getCloudletId();
+    }
+
+    /**
      * Gets the utilization percentage of cpu.
      *
      * @param time the time
@@ -1634,4 +1542,7 @@ public class Cloudlet {
         return getUtilizationModelBw().getUtilization(time);
     }
 
+    public List<String> getRequiredFiles() { return requiredFiles; }
+
+    protected void setRequiredFiles(List<String> requiredFiles) { this.requiredFiles = requiredFiles; }
 }

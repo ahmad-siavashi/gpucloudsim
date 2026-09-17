@@ -8,6 +8,8 @@
 
 package org.cloudbus.cloudsim;
 
+import org.cloudbus.cloudsim.core.GuestEntity;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -42,30 +44,31 @@ public class VmSchedulerSpaceShared extends VmScheduler {
 	 */
 	public VmSchedulerSpaceShared(List<? extends Pe> pelist) {
 		super(pelist);
-		setPeAllocationMap(new HashMap<String, List<Pe>>());
-		setFreePes(new ArrayList<Pe>());
+		setPeAllocationMap(new HashMap<>());
+		setFreePes(new ArrayList<>());
 		getFreePes().addAll(pelist);
 	}
 
 	@Override
-	public boolean allocatePesForVm(Vm vm, List<Double> mipsShare) {
+	public boolean allocatePesForGuest(GuestEntity guest, List<Double> mipsShare) {
 		// if there is no enough free PEs, fails
 		if (getFreePes().size() < mipsShare.size()) {
 			return false;
 		}
 
-		List<Pe> selectedPes = new ArrayList<Pe>();
+		List<Pe> selectedPes = new ArrayList<>();
 		Iterator<Pe> peIterator = getFreePes().iterator();
 		Pe pe = peIterator.next();
 		double totalMips = 0;
 		for (Double mips : mipsShare) {
 			if (mips <= pe.getMips()) {
 				selectedPes.add(pe);
+				totalMips += mips;
+
 				if (!peIterator.hasNext()) {
 					break;
 				}
 				pe = peIterator.next();
-				totalMips += mips;
 			}
 		}
 		if (mipsShare.size() > selectedPes.size()) {
@@ -74,24 +77,26 @@ public class VmSchedulerSpaceShared extends VmScheduler {
 
 		getFreePes().removeAll(selectedPes);
 
-		getPeAllocationMap().put(vm.getUid(), selectedPes);
-		getMipsMap().put(vm.getUid(), mipsShare);
+		getPeAllocationMap().put(guest.getUid(), selectedPes);
+		getMipsMapAllocated().put(guest.getUid(), mipsShare);
 		setAvailableMips(getAvailableMips() - totalMips);
+		guest.setCurrentAllocatedMips(mipsShare);
+
 		return true;
 	}
 
 	@Override
-	public void deallocatePesForVm(Vm vm) {
-		getFreePes().addAll(getPeAllocationMap().get(vm.getUid()));
-		getPeAllocationMap().remove(vm.getUid());
+	public void deallocatePesForGuest(GuestEntity guest) {
+		getFreePes().addAll(getPeAllocationMap().get(guest.getUid()));
+		getPeAllocationMap().remove(guest.getUid());
 
 		double totalMips = 0;
-		for (double mips : getMipsMap().get(vm.getUid())) {
+		for (double mips : getMipsMapAllocated().get(guest.getUid())) {
 			totalMips += mips;
 		}
 		setAvailableMips(getAvailableMips() + totalMips);
 
-		getMipsMap().remove(vm.getUid());
+		getMipsMapAllocated().remove(guest.getUid());
 	}
 
 	/**

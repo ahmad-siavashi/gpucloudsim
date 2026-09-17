@@ -9,6 +9,7 @@
 package org.cloudbus.cloudsim.provisioners;
 
 import org.cloudbus.cloudsim.Vm;
+import org.cloudbus.cloudsim.core.GuestEntity;
 
 /**
  * BwProvisioner is an abstract class that represents the provisioning policy used by a host
@@ -20,6 +21,7 @@ import org.cloudbus.cloudsim.Vm;
  * 
  * @author Rodrigo N. Calheiros
  * @author Anton Beloglazov
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 1.0
  */
 public abstract class BwProvisioner {
@@ -45,35 +47,40 @@ public abstract class BwProvisioner {
 
 	/**
 	 * Allocates BW for a given VM.
-	 * 
-	 * @param vm the virtual machine for which the bw are being allocated
-	 * @param bw the bw to be allocated to the VM
-	 * 
+	 *
+	 * @param guest the virtual machine for which the bw are being allocated
+	 * @param bw    the bw to be allocated to the VM
 	 * @return $true if the bw could be allocated; $false otherwise
-	 * 
 	 * @pre $none
 	 * @post $none
 	 */
-	public abstract boolean allocateBwForVm(Vm vm, long bw);
+	public abstract boolean allocateBwForGuest(GuestEntity guest, long bw);
+
+	@Deprecated
+	public boolean allocateBwForVm(Vm vm, long bw) { return allocateBwForGuest(vm, bw); }
 
 	/**
 	 * Gets the allocated BW for VM.
-	 * 
-	 * @param vm the VM
-	 * 
+	 *
+	 * @param guest the VM
 	 * @return the allocated BW for vm
 	 */
-	public abstract long getAllocatedBwForVm(Vm vm);
+	public abstract long getAllocatedBwForGuest(GuestEntity guest);
+
+	@Deprecated
+	public long getAllocateBwForVm(Vm vm) { return getAllocatedBwForGuest(vm); }
 
 	/**
 	 * Releases BW used by a VM.
-	 * 
-	 * @param vm the vm
-	 * 
+	 *
+	 * @param guest the vm
 	 * @pre $none
 	 * @post none
 	 */
-	public abstract void deallocateBwForVm(Vm vm);
+	public abstract void deallocateBwForGuest(GuestEntity guest);
+
+	@Deprecated
+	public void deallocateBwForVm(Vm vm) { deallocateBwForGuest(vm); }
 
 	/**
 	 * Releases BW used by all VMs.
@@ -81,21 +88,26 @@ public abstract class BwProvisioner {
 	 * @pre $none
 	 * @post none
 	 */
-	public void deallocateBwForAllVms() {
+	public void deallocateBwForAllGuests() {
 		setAvailableBw(getBw());
 	}
 
+	@Deprecated
+	public void deallocateBwForAllVms() { deallocateBwForAllGuests(); }
+
 	/**
 	 * Checks if it is possible to change the current allocated BW for the VM
-         * to a new amount, depending on the available BW.
-	 * 
-	 * @param vm the vm to check if there is enough available BW on the host to 
-         * change the VM allocated BW
-	 * @param bw the new total amount of BW for the VM.
-	 * 
+	 * to a new amount, depending on the available BW.
+	 *
+	 * @param guest the vm to check if there is enough available BW on the host to
+	 *              change the VM allocated BW
+	 * @param bw    the new total amount of BW for the VM.
 	 * @return true, if is suitable for vm
 	 */
-	public abstract boolean isSuitableForVm(Vm vm, long bw);
+	public abstract boolean isSuitableForGuest(GuestEntity guest, long bw);
+
+	@Deprecated
+	public boolean isSuitableForVm(Vm vm, long bw) { return isSuitableForGuest(vm, bw); }
 
 	/**
 	 * Gets the bw capacity.

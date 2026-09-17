@@ -1,18 +1,18 @@
 package org.cloudbus.cloudsim.gpu;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.cloudbus.cloudsim.Datacenter;
 import org.cloudbus.cloudsim.DatacenterCharacteristics;
-import org.cloudbus.cloudsim.Host;
 import org.cloudbus.cloudsim.Log;
 import org.cloudbus.cloudsim.Storage;
 import org.cloudbus.cloudsim.Vm;
 import org.cloudbus.cloudsim.VmAllocationPolicy;
+import org.cloudbus.cloudsim.core.CloudActionTags;
 import org.cloudbus.cloudsim.core.CloudSim;
 import org.cloudbus.cloudsim.core.CloudSimTags;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.core.HostEntity;
 import org.cloudbus.cloudsim.core.SimEvent;
 import org.cloudbus.cloudsim.gpu.core.GpuCloudSimTags;
 
@@ -27,8 +27,6 @@ public class GpuDatacenter extends Datacenter {
 
 	private double gpuTaskLastProcessTime;
 
-	private Map<GpuTask, ResGpuCloudlet> gpuTaskResGpuCloudletMap;
-
 	/**
 	 * See {@link Datacenter#Datacenter}
 	 */
@@ -36,7 +34,6 @@ public class GpuDatacenter extends Datacenter {
 			List<Storage> storageList, double schedulingInterval) throws Exception {
 		super(name, characteristics, vmAllocationPolicy, storageList, schedulingInterval);
 		setGpuTaskLastProcessTime(0.0);
-		setGpuTaskResGpuCloudletMap(new HashMap<>());
 	}
 
 	@Override
@@ -46,23 +43,18 @@ public class GpuDatacenter extends Datacenter {
 
 	@Override
 	protected void processOtherEvent(SimEvent ev) {
-		switch (ev.getTag()) {
-		case GpuCloudSimTags.GPU_MEMORY_TRANSFER:
+		CloudSimTags tag = ev.getTag();
+		if (tag == GpuCloudSimTags.GPU_MEMORY_TRANSFER) {
 			processGpuMemoryTransfer(ev);
-			break;
-		case GpuCloudSimTags.GPU_TASK_SUBMIT:
+		} else if (tag == GpuCloudSimTags.GPU_TASK_SUBMIT) {
 			processGpuTaskSubmit(ev);
-			break;
-		case GpuCloudSimTags.GPU_CLOUDLET_RETURN:
+		} else if (tag == GpuCloudSimTags.GPU_CLOUDLET_RETURN) {
 			processGpuCloudletReturn(ev);
-			break;
-		case GpuCloudSimTags.VGPU_DATACENTER_EVENT:
+		} else if (tag == GpuCloudSimTags.VGPU_DATACENTER_EVENT) {
 			updateGpuTaskProcessing();
 			checkGpuTaskCompletion();
-			break;
-		default:
+		} else {
 			super.processOtherEvent(ev);
-			break;
 		}
 	}
 
@@ -84,7 +76,7 @@ public class GpuDatacenter extends Datacenter {
 
 	protected void processGpuCloudletReturn(SimEvent ev) {
 		GpuCloudlet cloudlet = (GpuCloudlet) ev.getData();
-		sendNow(cloudlet.getUserId(), CloudSimTags.CLOUDLET_RETURN, cloudlet);
+		sendNow(cloudlet.getUserId(), CloudActionTags.CLOUDLET_RETURN, cloudlet);
 		notifyGpuTaskCompletion(cloudlet.getGpuTask());
 	}
 
@@ -108,7 +100,7 @@ public class GpuDatacenter extends Datacenter {
 		// simulation step is skipped and schedulers are not properly initialized
 		if (CloudSim.clock() < 0.111
 				|| CloudSim.clock() > geGpuTasktLastProcessTime() + CloudSim.getMinTimeBetweenEvents()) {
-			List<? extends Host> list = getVmAllocationPolicy().getHostList();
+			List<? extends HostEntity> list = getVmAllocationPolicy().getHostList();
 			double smallerTime = Double.MAX_VALUE;
 			// for each host...
 			for (int i = 0; i < list.size(); i++) {
@@ -132,7 +124,7 @@ public class GpuDatacenter extends Datacenter {
 	}
 
 	protected void checkGpuTaskCompletion() {
-		List<? extends Host> list = getVmAllocationPolicy().getHostList();
+		List<? extends HostEntity> list = getVmAllocationPolicy().getHostList();
 		for (int i = 0; i < list.size(); i++) {
 			GpuHost host = (GpuHost) list.get(i);
 			for (Vm vm : host.getVmList()) {
@@ -156,10 +148,10 @@ public class GpuDatacenter extends Datacenter {
 	@Override
 	protected void checkCloudletCompletion() {
 		super.checkCloudletCompletion();
-		List<? extends Host> list = getVmAllocationPolicy().getHostList();
+		List<? extends HostEntity> list = getVmAllocationPolicy().getHostList();
 		for (int i = 0; i < list.size(); i++) {
-			Host host = list.get(i);
-			for (Vm vm : host.getVmList()) {
+			HostEntity host = list.get(i);
+			for (GuestEntity vm : host.getGuestList()) {
 				GpuCloudletScheduler scheduler = (GpuCloudletScheduler) vm.getCloudletScheduler();
 				while (scheduler.hasGpuTask()) {
 					GpuTask gt = scheduler.getNextGpuTask();
@@ -186,7 +178,7 @@ public class GpuDatacenter extends Datacenter {
 			} else {
 				data[2] = CloudSimTags.FALSE;
 			}
-			send(vm.getUserId(), CloudSim.getMinTimeBetweenEvents(), CloudSimTags.VM_CREATE_ACK, data);
+			send(vm.getUserId(), CloudSim.getMinTimeBetweenEvents(), CloudActionTags.VM_CREATE_ACK, data);
 		}
 
 		if (result) {
@@ -266,14 +258,6 @@ public class GpuDatacenter extends Datacenter {
 
 	protected void setGpuTaskLastProcessTime(double lastGpuTaskProcessTime) {
 		this.gpuTaskLastProcessTime = lastGpuTaskProcessTime;
-	}
-
-	public Map<GpuTask, ResGpuCloudlet> getGpuTaskResGpuCloudletMap() {
-		return gpuTaskResGpuCloudletMap;
-	}
-
-	protected void setGpuTaskResGpuCloudletMap(Map<GpuTask, ResGpuCloudlet> gpuTaskResGpuCloudletMap) {
-		this.gpuTaskResGpuCloudletMap = gpuTaskResGpuCloudletMap;
 	}
 
 }

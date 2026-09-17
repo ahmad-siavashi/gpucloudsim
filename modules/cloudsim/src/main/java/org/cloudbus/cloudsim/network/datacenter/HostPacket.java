@@ -3,10 +3,12 @@
  * Description:  CloudSim (Cloud Simulation) Toolkit for Modeling and Simulation of Clouds
  * Licence:      GPL - http://www.gnu.org/copyleft/gpl.html
  *
- * Copyright (c) 2009-2012, The University of Melbourne, Australia
+ * Copyright (c) 2009-2024, The University of Melbourne, Australia
  */
 
 package org.cloudbus.cloudsim.network.datacenter;
+
+import org.cloudbus.cloudsim.core.CloudSim;
 
 /**
  * HostPacket represents the packet that travels through the virtual network within a Host.
@@ -20,60 +22,55 @@ package org.cloudbus.cloudsim.network.datacenter;
  * </ul>
  * 
  * @author Saurabh Kumar Garg
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 1.0
- * @todo Attributes should be private
+ * //@TODO Attributes should be private
  */
 public class HostPacket {
-        /**
-         * Id of the sender VM.
-         */
-	int sender;
+	/**
+	 * Id of the sender guest.
+	 */
+	int senderGuestId;
 
-        /**
-         * Id of the receiver VM.
-         */
-	int reciever;
-        
-        /**
-         * Id of the sender cloudlet.
-         */
-	int virtualsendid;
+	/** Id of the receiver VM. */
+	int receiverGuestId;
 
-        /**
-         * Id of the receiver cloudlet.
-         */
-        int virtualrecvid;
 
-        /**
-         * The length of the data being sent (in bytes).
-        */        
-	double data;
+	/** Id of the sender cloudlet. */
+	int senderCloudletId;
 
-        /**
-         * The time the packet was sent.
-         */
-	double sendtime;
+	/** Id of the receiver cloudlet. */
+	int receiverCloudletId;
 
-        /**
-         * The time the packet was received.
-         */
-	double recievetime;
 
-	public HostPacket(
-			int sender,
-			int reciever,
-			double data,
-			double sendtime,
-			double recievetime,
-			int vsnd,
-			int vrvd) {
-		super();
-		this.sender = sender;
-		this.reciever = reciever;
-		this.data = data;
-		this.sendtime = sendtime;
-		this.recievetime = recievetime;
-		virtualrecvid = vrvd;
-		virtualsendid = vsnd;
+	/** The length of the data being sent (in bytes). */
+	long data;
+
+	/** The time the packet was sent. */
+	double sendTime;
+
+	/** The time the packet was received. */
+	double recvTime;
+
+
+	/** Accumulated virtualization overhead (for virtual networks) */
+	int accumulatedVirtualizationOverhead;
+
+	public HostPacket(NetworkCloudlet cl, int taskStageId) {
+			// Guest-level info
+			senderGuestId = cl.getGuestId();
+			receiverGuestId = cl.stages.get(taskStageId).getTargetCloudlet().getGuestId();
+
+			// Cloudlet-level info
+			senderCloudletId = cl.getCloudletId();
+			receiverCloudletId = cl.stages.get(taskStageId).getTargetCloudlet().getCloudletId();
+
+			// packet info
+			data = cl.stages.get(taskStageId).getTaskLength();
+
+			sendTime = CloudSim.clock();
+			recvTime = -1;
+
+			accumulatedVirtualizationOverhead = 0;
 	}
 }

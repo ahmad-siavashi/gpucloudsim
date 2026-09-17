@@ -3,7 +3,6 @@ package org.cloudbus.cloudsim.gpu;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.cloudbus.cloudsim.Cloudlet;
 import org.cloudbus.cloudsim.Consts;
 import org.cloudbus.cloudsim.core.CloudSim;
 
@@ -264,14 +263,14 @@ public class ResGpuTask {
 				}
 			}
 
-			if (prevStatus == Cloudlet.RESUMED && status == Cloudlet.SUCCESS) {
+			if (prevStatus == GpuTask.RESUMED && status == GpuTask.SUCCESS) {
 				// then update the GpuTask completion time
 				totalCompletionTime += (clock - startExecTime);
 				return true;
 			}
 
 			// if a GpuTask is now in execution
-			if (status == Cloudlet.INEXEC || (prevStatus == Cloudlet.PAUSED && status == Cloudlet.RESUMED)) {
+			if (status == GpuTask.INEXEC || (prevStatus == GpuTask.PAUSED && status == GpuTask.RESUMED)) {
 				startExecTime = clock;
 				task.setExecStartTime(startExecTime);
 			}

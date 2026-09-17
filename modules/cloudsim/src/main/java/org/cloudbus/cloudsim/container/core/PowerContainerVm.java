@@ -1,29 +1,32 @@
+/*
+ * Title: CloudSim Toolkit Description: CloudSim (Cloud Simulation) Toolkit for Modeling and
+ * Simulation of Clouds Licence: GPL - http://www.gnu.org/copyleft/gpl.html
+ *
+ * Copyright (c) 2009-2024, The University of Melbourne, Australia
+ */
+
 package org.cloudbus.cloudsim.container.core;
 
-import org.cloudbus.cloudsim.container.containerProvisioners.ContainerBwProvisioner;
-import org.cloudbus.cloudsim.container.containerProvisioners.ContainerPe;
-import org.cloudbus.cloudsim.container.containerProvisioners.ContainerRamProvisioner;
-import org.cloudbus.cloudsim.container.schedulers.ContainerScheduler;
+import org.cloudbus.cloudsim.Pe;
+import org.cloudbus.cloudsim.VmScheduler;
 import org.cloudbus.cloudsim.core.CloudSim;
-import org.cloudbus.cloudsim.util.MathUtil;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.core.PowerGuestEntity;
+import org.cloudbus.cloudsim.provisioners.BwProvisioner;
+import org.cloudbus.cloudsim.provisioners.RamProvisioner;
+import org.cloudbus.cloudsim.util.HistoryStat;
 
-import java.util.LinkedList;
 import java.util.List;
 
 /**
  * Created by sareh on 14/07/15.
+ * Modified by Remo Andreoli (March 2024)
  */
-public class PowerContainerVm extends ContainerVm {
-
-    /**
-     * The Constant HISTORY_LENGTH.
-     */
-    public static final int HISTORY_LENGTH = 30;
-
+public class PowerContainerVm extends ContainerVm implements PowerGuestEntity {
     /**
      * The utilization history.
      */
-    private final List<Double> utilizationHistory = new LinkedList<Double>();
+    private final HistoryStat utilizationHistoryStat = new HistoryStat(PowerGuestEntity.HISTORY_LENGTH);
 
     /**
      * The previous time.
@@ -52,14 +55,14 @@ public class PowerContainerVm extends ContainerVm {
             final int id,
             final int userId,
             final double mips,
-            final float ram,
+            final int ram,
             final long bw,
             final long size,
             final String vmm,
-            final ContainerScheduler containerScheduler,
-            final ContainerRamProvisioner containerRamProvisioner,
-            final ContainerBwProvisioner containerBwProvisioner,
-            List<? extends ContainerPe> peList,
+            final VmScheduler containerScheduler,
+            final RamProvisioner containerRamProvisioner,
+            final BwProvisioner containerBwProvisioner,
+            List<? extends Pe> peList,
             final double schedulingInterval) {
         super(id, userId, mips, ram, bw, size, vmm, containerScheduler, containerRamProvisioner, containerBwProvisioner, peList);
         setSchedulingInterval(schedulingInterval);
@@ -75,20 +78,16 @@ public class PowerContainerVm extends ContainerVm {
      * @pre currentTime >= 0
      * @post $none
      */
-
-
-
-
     @Override
-    public double updateVmProcessing(final double currentTime, final List<Double> mipsShare) {
-        double time = super.updateVmProcessing(currentTime, mipsShare);
-        if (currentTime > getPreviousTime() && (currentTime - 0.2) % getSchedulingInterval() == 0) {
+    public double updateCloudletsProcessing(final double currentTime, final List<Double> mipsShare) {
+        double time = super.updateCloudletsProcessing(currentTime, mipsShare);
+        if (currentTime - getPreviousTime() >= getSchedulingInterval()) {
             double utilization = 0;
 
-            for (Container container : getContainerList()) {
+            for (GuestEntity container : getGuestList()) {
                 // The containers which are going to migrate to the vm shouldn't be added to the utilization
-                if(!getContainersMigratingIn().contains(container)) {
-                    time = container.getContainerCloudletScheduler().getPreviousTime();
+                if(!getGuestsMigratingIn().contains(container)) {
+                    time = container.getCloudletScheduler().getPreviousTime();
                     utilization += container.getTotalUtilizationOfCpu(time);
                 }
                 }
@@ -102,88 +101,12 @@ public class PowerContainerVm extends ContainerVm {
     }
 
     /**
-     * Gets the utilization MAD in MIPS.
-     *
-     * @return the utilization mean in MIPS
-     */
-    public double getUtilizationMad() {
-        double mad = 0;
-        if (!getUtilizationHistory().isEmpty()) {
-            int n = HISTORY_LENGTH;
-            if (HISTORY_LENGTH > getUtilizationHistory().size()) {
-                n = getUtilizationHistory().size();
-            }
-            double median = MathUtil.median(getUtilizationHistory());
-            double[] deviationSum = new double[n];
-            for (int i = 0; i < n; i++) {
-                deviationSum[i] = Math.abs(median - getUtilizationHistory().get(i));
-            }
-            mad = MathUtil.median(deviationSum);
-        }
-        return mad;
-    }
-
-    /**
-     * Gets the utilization mean in percents.
-     *
-     * @return the utilization mean in MIPS
-     */
-    public double getUtilizationMean() {
-        double mean = 0;
-        if (!getUtilizationHistory().isEmpty()) {
-            int n = HISTORY_LENGTH;
-            if (HISTORY_LENGTH > getUtilizationHistory().size()) {
-                n = getUtilizationHistory().size();
-            }
-            for (int i = 0; i < n; i++) {
-                mean += getUtilizationHistory().get(i);
-            }
-            mean /= n;
-        }
-        return mean * getMips();
-    }
-
-    /**
-     * Gets the utilization variance in MIPS.
-     *
-     * @return the utilization variance in MIPS
-     */
-    public double getUtilizationVariance() {
-        double mean = getUtilizationMean();
-        double variance = 0;
-        if (!getUtilizationHistory().isEmpty()) {
-            int n = HISTORY_LENGTH;
-            if (HISTORY_LENGTH > getUtilizationHistory().size()) {
-                n = getUtilizationHistory().size();
-            }
-            for (int i = 0; i < n; i++) {
-                double tmp = getUtilizationHistory().get(i) * getMips() - mean;
-                variance += tmp * tmp;
-            }
-            variance /= n;
-        }
-        return variance;
-    }
-
-    /**
-     * Adds the utilization history value.
-     *
-     * @param utilization the utilization
-     */
-    public void addUtilizationHistoryValue(final double utilization) {
-        getUtilizationHistory().add(0, utilization);
-        if (getUtilizationHistory().size() > HISTORY_LENGTH) {
-            getUtilizationHistory().remove(HISTORY_LENGTH);
-        }
-    }
-
-    /**
      * Gets the utilization history.
      *
      * @return the utilization history
      */
-    public List<Double> getUtilizationHistory() {
-        return utilizationHistory;
+    public HistoryStat getUtilizationHistory() {
+        return utilizationHistoryStat;
     }
 
     /**
@@ -221,16 +144,4 @@ public class PowerContainerVm extends ContainerVm {
     protected void setSchedulingInterval(final double schedulingInterval) {
         this.schedulingInterval = schedulingInterval;
     }
-
-    public double[] getUtilizationHistoryList(){
-        double[] utilizationHistoryList = new double[PowerContainerVm.HISTORY_LENGTH];
-//            if any thing happens check if you need to have mips and the trim
-        for (int i = 0; i < getUtilizationHistory().size(); i++) {
-            utilizationHistoryList[i] += getUtilizationHistory().get(i) * getMips();
-        }
-
-        return MathUtil.trimZeroTail(utilizationHistoryList);
-    }
 }
-
-

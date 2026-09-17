@@ -11,16 +11,18 @@ c) 2009-2010, The University of Melbourne, Australia
 
 package org.cloudbus.cloudsim;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertSame;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.LinkedList;
 
-import org.junit.Before;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * @author		Anton Beloglazov
+ * @author 		Remo Andreoli
  * @since		CloudSim Toolkit 2.0
  */
 public class CloudletTest {
@@ -36,7 +38,7 @@ public class CloudletTest {
 	private UtilizationModel utilizationModelRam;
 	private UtilizationModel utilizationModelBw;
 
-	@Before
+	@BeforeEach
 	public void setUp() throws Exception {
 		utilizationModelCpu = new UtilizationModelStochastic();
 		utilizationModelRam = new UtilizationModelStochastic();
@@ -55,6 +57,8 @@ public class CloudletTest {
 		assertSame(utilizationModelCpu, cloudlet.getUtilizationModelCpu());
 		assertSame(utilizationModelRam, cloudlet.getUtilizationModelRam());
 		assertSame(utilizationModelBw, cloudlet.getUtilizationModelBw());
+		assertEquals(CLOUDLET_LENGTH * PES_NUMBER, cloudlet.getRemainingCloudletLength());
+		assertEquals(0, cloudlet.getCloudletFinishedSoFar());
 	}
 
 	@Test
@@ -75,7 +79,7 @@ public class CloudletTest {
 	@Test
 	public void testCloudletAlternativeConstructor1() {
 		cloudlet = new Cloudlet(0, CLOUDLET_LENGTH, PES_NUMBER, CLOUDLET_FILE_SIZE, CLOUDLET_OUTPUT_SIZE,
-				utilizationModelCpu, utilizationModelRam, utilizationModelBw, true, new LinkedList<String>());
+				utilizationModelCpu, utilizationModelRam, utilizationModelBw, true, new LinkedList<>());
 		testCloudlet();
 		testGetUtilizationOfCpu();
 		testGetUtilizationOfRam();
@@ -85,7 +89,7 @@ public class CloudletTest {
 	@Test
 	public void testCloudletAlternativeConstructor2() {
 		cloudlet = new Cloudlet(0, CLOUDLET_LENGTH, PES_NUMBER, CLOUDLET_FILE_SIZE, CLOUDLET_OUTPUT_SIZE,
-				utilizationModelCpu, utilizationModelRam, utilizationModelBw, new LinkedList<String>());
+				utilizationModelCpu, utilizationModelRam, utilizationModelBw, new LinkedList<>());
 		testCloudlet();
 		testGetUtilizationOfCpu();
 		testGetUtilizationOfRam();

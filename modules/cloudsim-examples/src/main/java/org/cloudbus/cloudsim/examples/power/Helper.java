@@ -28,9 +28,7 @@ import org.cloudbus.cloudsim.VmAllocationPolicy;
 import org.cloudbus.cloudsim.VmSchedulerTimeSharedOverSubscription;
 import org.cloudbus.cloudsim.VmStateHistoryEntry;
 import org.cloudbus.cloudsim.power.PowerDatacenter;
-import org.cloudbus.cloudsim.power.PowerDatacenterBroker;
 import org.cloudbus.cloudsim.power.PowerHost;
-import org.cloudbus.cloudsim.power.PowerHostUtilizationHistory;
 import org.cloudbus.cloudsim.power.PowerVm;
 import org.cloudbus.cloudsim.power.PowerVmAllocationPolicyMigrationAbstract;
 import org.cloudbus.cloudsim.provisioners.BwProvisionerSimple;
@@ -47,7 +45,7 @@ import org.cloudbus.cloudsim.util.MathUtil;
  * Anton Beloglazov, and Rajkumar Buyya, "Optimal Online Deterministic Algorithms and Adaptive
  * Heuristics for Energy and Performance Efficient Dynamic Consolidation of Virtual Machines in
  * Cloud Data Centers", Concurrency and Computation: Practice and Experience (CCPE), Volume 24,
- * Issue 13, Pages: 1397-1420, John Wiley & Sons, Ltd, New York, USA, 2012
+ * Issue 13, Pages: 1397-1420, John Wiley &amp; Sons, Ltd, New York, USA, 2012
  * 
  * @author Anton Beloglazov
  */
@@ -62,7 +60,7 @@ public class Helper {
 	 * @return the list< vm>
 	 */
 	public static List<Vm> createVmList(int brokerId, int vmsNumber) {
-		List<Vm> vms = new ArrayList<Vm>();
+		List<Vm> vms = new ArrayList<>();
 		for (int i = 0; i < vmsNumber; i++) {
 			int vmType = i / (int) Math.ceil((double) vmsNumber / Constants.VM_TYPES);
 			vms.add(new PowerVm(
@@ -89,16 +87,16 @@ public class Helper {
 	 * @return the list< power host>
 	 */
 	public static List<PowerHost> createHostList(int hostsNumber) {
-		List<PowerHost> hostList = new ArrayList<PowerHost>();
+		List<PowerHost> hostList = new ArrayList<>();
 		for (int i = 0; i < hostsNumber; i++) {
 			int hostType = i % Constants.HOST_TYPES;
 
-			List<Pe> peList = new ArrayList<Pe>();
+			List<Pe> peList = new ArrayList<>();
 			for (int j = 0; j < Constants.HOST_PES[hostType]; j++) {
 				peList.add(new Pe(j, new PeProvisionerSimple(Constants.HOST_MIPS[hostType])));
 			}
 
-			hostList.add(new PowerHostUtilizationHistory(
+			hostList.add(new PowerHost(
 					i,
 					new RamProvisionerSimple(Constants.HOST_RAM[hostType]),
 					new BwProvisionerSimple(Constants.HOST_BW),
@@ -118,7 +116,7 @@ public class Helper {
 	public static DatacenterBroker createBroker() {
 		DatacenterBroker broker = null;
 		try {
-			broker = new PowerDatacenterBroker("Broker");
+			broker = new DatacenterBroker("Broker");
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.exit(0);
@@ -133,7 +131,6 @@ public class Helper {
 	 * @param datacenterClass the datacenter class
 	 * @param hostList the host list
 	 * @param vmAllocationPolicy the vm allocation policy
-	 * @param simulationLength
 	 * 
 	 * @return the power datacenter
 	 * 
@@ -192,15 +189,15 @@ public class Helper {
 	 * @return the times before host shutdown
 	 */
 	public static List<Double> getTimesBeforeHostShutdown(List<Host> hosts) {
-		List<Double> timeBeforeShutdown = new LinkedList<Double>();
+		List<Double> timeBeforeShutdown = new LinkedList<>();
 		for (Host host : hosts) {
 			boolean previousIsActive = true;
 			double lastTimeSwitchedOn = 0;
 			for (HostStateHistoryEntry entry : ((HostDynamicWorkload) host).getStateHistory()) {
-				if (previousIsActive == true && entry.isActive() == false) {
+				if (previousIsActive && !entry.isActive()) {
 					timeBeforeShutdown.add(entry.getTime() - lastTimeSwitchedOn);
 				}
-				if (previousIsActive == false && entry.isActive() == true) {
+				if (!previousIsActive && entry.isActive()) {
 					lastTimeSwitchedOn = entry.getTime();
 				}
 				previousIsActive = entry.isActive();
@@ -216,15 +213,15 @@ public class Helper {
 	 * @return the times before vm migration
 	 */
 	public static List<Double> getTimesBeforeVmMigration(List<Vm> vms) {
-		List<Double> timeBeforeVmMigration = new LinkedList<Double>();
+		List<Double> timeBeforeVmMigration = new LinkedList<>();
 		for (Vm vm : vms) {
 			boolean previousIsInMigration = false;
 			double lastTimeMigrationFinished = 0;
 			for (VmStateHistoryEntry entry : vm.getStateHistory()) {
-				if (previousIsInMigration == true && entry.isInMigration() == false) {
+				if (previousIsInMigration && !entry.isInMigration()) {
 					timeBeforeVmMigration.add(entry.getTime() - lastTimeMigrationFinished);
 				}
-				if (previousIsInMigration == false && entry.isInMigration() == true) {
+				if (!previousIsInMigration && entry.isInMigration()) {
 					lastTimeMigrationFinished = entry.getTime();
 				}
 				previousIsInMigration = entry.isInMigration();
@@ -316,26 +313,26 @@ public class Helper {
 			StringBuilder data = new StringBuilder();
 			String delimeter = ",";
 
-			data.append(experimentName + delimeter);
+			data.append(experimentName).append(delimeter);
 			data.append(parseExperimentName(experimentName));
-			data.append(String.format("%d", numberOfHosts) + delimeter);
-			data.append(String.format("%d", numberOfVms) + delimeter);
-			data.append(String.format("%.2f", totalSimulationTime) + delimeter);
-			data.append(String.format("%.5f", energy) + delimeter);
-			data.append(String.format("%d", numberOfMigrations) + delimeter);
-			data.append(String.format("%.10f", sla) + delimeter);
-			data.append(String.format("%.10f", slaTimePerActiveHost) + delimeter);
-			data.append(String.format("%.10f", slaDegradationDueToMigration) + delimeter);
-			data.append(String.format("%.10f", slaOverall) + delimeter);
-			data.append(String.format("%.10f", slaAverage) + delimeter);
+			data.append(String.format("%d", numberOfHosts)).append(delimeter);
+			data.append(String.format("%d", numberOfVms)).append(delimeter);
+			data.append(String.format("%.2f", totalSimulationTime)).append(delimeter);
+			data.append(String.format("%.5f", energy)).append(delimeter);
+			data.append(String.format("%d", numberOfMigrations)).append(delimeter);
+			data.append(String.format("%.10f", sla)).append(delimeter);
+			data.append(String.format("%.10f", slaTimePerActiveHost)).append(delimeter);
+			data.append(String.format("%.10f", slaDegradationDueToMigration)).append(delimeter);
+			data.append(String.format("%.10f", slaOverall)).append(delimeter);
+			data.append(String.format("%.10f", slaAverage)).append(delimeter);
 			// data.append(String.format("%.5f", slaTimePerVmWithMigration) + delimeter);
 			// data.append(String.format("%.5f", slaTimePerVmWithoutMigration) + delimeter);
 			// data.append(String.format("%.5f", slaTimePerHost) + delimeter);
-			data.append(String.format("%d", numberOfHostShutdowns) + delimeter);
-			data.append(String.format("%.2f", meanTimeBeforeHostShutdown) + delimeter);
-			data.append(String.format("%.2f", stDevTimeBeforeHostShutdown) + delimeter);
-			data.append(String.format("%.2f", meanTimeBeforeVmMigration) + delimeter);
-			data.append(String.format("%.2f", stDevTimeBeforeVmMigration) + delimeter);
+			data.append(String.format("%d", numberOfHostShutdowns)).append(delimeter);
+			data.append(String.format("%.2f", meanTimeBeforeHostShutdown)).append(delimeter);
+			data.append(String.format("%.2f", stDevTimeBeforeHostShutdown)).append(delimeter);
+			data.append(String.format("%.2f", meanTimeBeforeVmMigration)).append(delimeter);
+			data.append(String.format("%.2f", stDevTimeBeforeVmMigration)).append(delimeter);
 
 			if (datacenter.getVmAllocationPolicy() instanceof PowerVmAllocationPolicyMigrationAbstract) {
 				PowerVmAllocationPolicyMigrationAbstract vmAllocationPolicy = (PowerVmAllocationPolicyMigrationAbstract) datacenter
@@ -358,14 +355,14 @@ public class Helper {
 				double executionTimeTotalStDev = MathUtil.stDev(vmAllocationPolicy
 						.getExecutionTimeHistoryTotal());
 
-				data.append(String.format("%.5f", executionTimeVmSelectionMean) + delimeter);
-				data.append(String.format("%.5f", executionTimeVmSelectionStDev) + delimeter);
-				data.append(String.format("%.5f", executionTimeHostSelectionMean) + delimeter);
-				data.append(String.format("%.5f", executionTimeHostSelectionStDev) + delimeter);
-				data.append(String.format("%.5f", executionTimeVmReallocationMean) + delimeter);
-				data.append(String.format("%.5f", executionTimeVmReallocationStDev) + delimeter);
-				data.append(String.format("%.5f", executionTimeTotalMean) + delimeter);
-				data.append(String.format("%.5f", executionTimeTotalStDev) + delimeter);
+				data.append(String.format("%.5f", executionTimeVmSelectionMean)).append(delimeter);
+				data.append(String.format("%.5f", executionTimeVmSelectionStDev)).append(delimeter);
+				data.append(String.format("%.5f", executionTimeHostSelectionMean)).append(delimeter);
+				data.append(String.format("%.5f", executionTimeHostSelectionStDev)).append(delimeter);
+				data.append(String.format("%.5f", executionTimeVmReallocationMean)).append(delimeter);
+				data.append(String.format("%.5f", executionTimeVmReallocationStDev)).append(delimeter);
+				data.append(String.format("%.5f", executionTimeTotalMean)).append(delimeter);
+				data.append(String.format("%.5f", executionTimeTotalStDev)).append(delimeter);
 
 				writeMetricHistory(hosts, vmAllocationPolicy, outputFolder + "/metrics/" + experimentName
 						+ "_metric");
@@ -381,36 +378,36 @@ public class Helper {
 
 		} else {
 			Log.setDisabled(false);
-			Log.printLine();
-			Log.printLine(String.format("Experiment name: " + experimentName));
-			Log.printLine(String.format("Number of hosts: " + numberOfHosts));
-			Log.printLine(String.format("Number of VMs: " + numberOfVms));
-			Log.printLine(String.format("Total simulation time: %.2f sec", totalSimulationTime));
-			Log.printLine(String.format("Energy consumption: %.2f kWh", energy));
-			Log.printLine(String.format("Number of VM migrations: %d", numberOfMigrations));
-			Log.printLine(String.format("SLA: %.5f%%", sla * 100));
-			Log.printLine(String.format(
+			Log.println();
+			Log.println("Experiment name: " + experimentName);
+			Log.println("Number of hosts: " + numberOfHosts);
+			Log.println("Number of VMs: " + numberOfVms);
+			Log.println(String.format("Total simulation time: %.2f sec", totalSimulationTime));
+			Log.println(String.format("Energy consumption: %.2f kWh", energy));
+			Log.println(String.format("Number of VM migrations: %d", numberOfMigrations));
+			Log.println(String.format("SLA: %.5f%%", sla * 100));
+			Log.println(String.format(
 					"SLA perf degradation due to migration: %.2f%%",
 					slaDegradationDueToMigration * 100));
-			Log.printLine(String.format("SLA time per active host: %.2f%%", slaTimePerActiveHost * 100));
-			Log.printLine(String.format("Overall SLA violation: %.2f%%", slaOverall * 100));
-			Log.printLine(String.format("Average SLA violation: %.2f%%", slaAverage * 100));
+			Log.println(String.format("SLA time per active host: %.2f%%", slaTimePerActiveHost * 100));
+			Log.println(String.format("Overall SLA violation: %.2f%%", slaOverall * 100));
+			Log.println(String.format("Average SLA violation: %.2f%%", slaAverage * 100));
 			// Log.printLine(String.format("SLA time per VM with migration: %.2f%%",
 			// slaTimePerVmWithMigration * 100));
 			// Log.printLine(String.format("SLA time per VM without migration: %.2f%%",
 			// slaTimePerVmWithoutMigration * 100));
 			// Log.printLine(String.format("SLA time per host: %.2f%%", slaTimePerHost * 100));
-			Log.printLine(String.format("Number of host shutdowns: %d", numberOfHostShutdowns));
-			Log.printLine(String.format(
+			Log.println(String.format("Number of host shutdowns: %d", numberOfHostShutdowns));
+			Log.println(String.format(
 					"Mean time before a host shutdown: %.2f sec",
 					meanTimeBeforeHostShutdown));
-			Log.printLine(String.format(
+			Log.println(String.format(
 					"StDev time before a host shutdown: %.2f sec",
 					stDevTimeBeforeHostShutdown));
-			Log.printLine(String.format(
+			Log.println(String.format(
 					"Mean time before a VM migration: %.2f sec",
 					meanTimeBeforeVmMigration));
-			Log.printLine(String.format(
+			Log.println(String.format(
 					"StDev time before a VM migration: %.2f sec",
 					stDevTimeBeforeVmMigration));
 
@@ -435,29 +432,29 @@ public class Helper {
 				double executionTimeTotalStDev = MathUtil.stDev(vmAllocationPolicy
 						.getExecutionTimeHistoryTotal());
 
-				Log.printLine(String.format(
+				Log.println(String.format(
 						"Execution time - VM selection mean: %.5f sec",
 						executionTimeVmSelectionMean));
-				Log.printLine(String.format(
+				Log.println(String.format(
 						"Execution time - VM selection stDev: %.5f sec",
 						executionTimeVmSelectionStDev));
-				Log.printLine(String.format(
+				Log.println(String.format(
 						"Execution time - host selection mean: %.5f sec",
 						executionTimeHostSelectionMean));
-				Log.printLine(String.format(
+				Log.println(String.format(
 						"Execution time - host selection stDev: %.5f sec",
 						executionTimeHostSelectionStDev));
-				Log.printLine(String.format(
+				Log.println(String.format(
 						"Execution time - VM reallocation mean: %.5f sec",
 						executionTimeVmReallocationMean));
-				Log.printLine(String.format(
+				Log.println(String.format(
 						"Execution time - VM reallocation stDev: %.5f sec",
 						executionTimeVmReallocationStDev));
-				Log.printLine(String.format("Execution time - total mean: %.5f sec", executionTimeTotalMean));
-				Log.printLine(String
+				Log.println(String.format("Execution time - total mean: %.5f sec", executionTimeTotalMean));
+				Log.println(String
 						.format("Execution time - total stDev: %.5f sec", executionTimeTotalStDev));
 			}
-			Log.printLine();
+			Log.println();
 		}
 
 		Log.setDisabled(true);
@@ -475,7 +472,7 @@ public class Helper {
 		scanner.useDelimiter("_");
 		for (int i = 0; i < 4; i++) {
 			if (scanner.hasNext()) {
-				csvName.append(scanner.next() + ",");
+				csvName.append(scanner.next()).append(",");
 			} else {
 				csvName.append(",");
 			}
@@ -561,8 +558,8 @@ public class Helper {
 	 * @return the sla metrics
 	 */
 	protected static Map<String, Double> getSlaMetrics(List<Vm> vms) {
-		Map<String, Double> metrics = new HashMap<String, Double>();
-		List<Double> slaViolation = new LinkedList<Double>();
+		Map<String, Double> metrics = new HashMap<>();
+		List<Double> slaViolation = new LinkedList<>();
 		double totalAllocated = 0;
 		double totalRequested = 0;
 		double totalUnderAllocatedDueToMigration = 0;
@@ -682,7 +679,7 @@ public class Helper {
 		for (int j = 0; j < 10; j++) {
 			Host host = hosts.get(j);
 
-			if (!vmAllocationPolicy.getTimeHistory().containsKey(host.getId())) {
+			if (vmAllocationPolicy.getTimeHistory(host.getId()) == null) {
 				continue;
 			}
 			File file = new File(outputPath + "_" + host.getId() + ".csv");
@@ -694,9 +691,9 @@ public class Helper {
 			}
 			try {
 				BufferedWriter writer = new BufferedWriter(new FileWriter(file));
-				List<Double> timeData = vmAllocationPolicy.getTimeHistory().get(host.getId());
-				List<Double> utilizationData = vmAllocationPolicy.getUtilizationHistory().get(host.getId());
-				List<Double> metricData = vmAllocationPolicy.getMetricHistory().get(host.getId());
+				List<Double> timeData = vmAllocationPolicy.getTimeHistory(host.getId());
+				List<Double> utilizationData = vmAllocationPolicy.getUtilizationHistory(host.getId());
+				List<Double> metricData = vmAllocationPolicy.getMetricHistory(host.getId());
 
 				for (int i = 0; i < timeData.size(); i++) {
 					writer.write(String.format(
@@ -723,23 +720,23 @@ public class Helper {
 		Cloudlet cloudlet;
 
 		String indent = "\t";
-		Log.printLine();
-		Log.printLine("========== OUTPUT ==========");
-		Log.printLine("Cloudlet ID" + indent + "STATUS" + indent + "Resource ID" + indent + "VM ID" + indent
+		Log.println();
+		Log.println("========== OUTPUT ==========");
+		Log.println("Cloudlet ID" + indent + "STATUS" + indent + "Resource ID" + indent + "VM ID" + indent
 				+ "Time" + indent + "Start Time" + indent + "Finish Time");
 
 		DecimalFormat dft = new DecimalFormat("###.##");
-		for (int i = 0; i < size; i++) {
-			cloudlet = list.get(i);
-			Log.print(indent + cloudlet.getCloudletId());
+        for (Cloudlet value : list) {
+            cloudlet = value;
+            Log.print(indent + cloudlet.getCloudletId());
 
-			if (cloudlet.getCloudletStatus() == Cloudlet.SUCCESS) {
-				Log.printLine(indent + "SUCCESS" + indent + indent + cloudlet.getResourceId() + indent
-						+ cloudlet.getVmId() + indent + dft.format(cloudlet.getActualCPUTime()) + indent
-						+ dft.format(cloudlet.getExecStartTime()) + indent + indent
-						+ dft.format(cloudlet.getFinishTime()));
-			}
-		}
+            if (cloudlet.getStatus() == Cloudlet.CloudletStatus.SUCCESS) {
+                Log.println(indent + "SUCCESS" + indent + indent + cloudlet.getResourceId() + indent
+                        + cloudlet.getGuestId() + indent + dft.format(cloudlet.getActualCPUTime()) + indent
+                        + dft.format(cloudlet.getExecStartTime()) + indent + indent
+                        + dft.format(cloudlet.getExecFinishTime()));
+            }
+        }
 	}
 
 	/**
@@ -754,25 +751,25 @@ public class Helper {
 		for (int i = 0; i < 10; i++) {
 			Host host = hosts.get(i);
 
-			Log.printLine("Host #" + host.getId());
-			Log.printLine("Time:");
-			if (!vmAllocationPolicy.getTimeHistory().containsKey(host.getId())) {
+			Log.println("Host #" + host.getId());
+			Log.println("Time:");
+			if (vmAllocationPolicy.getTimeHistory(host.getId()) == null) {
 				continue;
 			}
-			for (Double time : vmAllocationPolicy.getTimeHistory().get(host.getId())) {
+			for (Double time : vmAllocationPolicy.getTimeHistory(host.getId())) {
 				Log.format("%.2f, ", time);
 			}
-			Log.printLine();
+			Log.println();
 
-			for (Double utilization : vmAllocationPolicy.getUtilizationHistory().get(host.getId())) {
+			for (Double utilization : vmAllocationPolicy.getUtilizationHistory(host.getId())) {
 				Log.format("%.2f, ", utilization);
 			}
-			Log.printLine();
+			Log.println();
 
-			for (Double metric : vmAllocationPolicy.getMetricHistory().get(host.getId())) {
+			for (Double metric : vmAllocationPolicy.getMetricHistory(host.getId())) {
 				Log.format("%.2f, ", metric);
 			}
-			Log.printLine();
+			Log.println();
 		}
 	}
 

@@ -9,7 +9,6 @@
 package org.cloudbus.cloudsim.power;
 
 import java.util.List;
-import java.util.Map;
 
 import org.cloudbus.cloudsim.Datacenter;
 import org.cloudbus.cloudsim.DatacenterCharacteristics;
@@ -17,8 +16,10 @@ import org.cloudbus.cloudsim.Log;
 import org.cloudbus.cloudsim.Storage;
 import org.cloudbus.cloudsim.Vm;
 import org.cloudbus.cloudsim.VmAllocationPolicy;
+import org.cloudbus.cloudsim.VmAllocationPolicy.GuestMapping;
+import org.cloudbus.cloudsim.core.CloudActionTags;
 import org.cloudbus.cloudsim.core.CloudSim;
-import org.cloudbus.cloudsim.core.CloudSimTags;
+import org.cloudbus.cloudsim.core.GuestEntity;
 import org.cloudbus.cloudsim.core.SimEvent;
 import org.cloudbus.cloudsim.core.predicates.PredicateType;
 
@@ -32,7 +33,7 @@ import org.cloudbus.cloudsim.core.predicates.PredicateType;
  * <li><a href="http://dx.doi.org/10.1002/cpe.1867">Anton Beloglazov, and Rajkumar Buyya, "Optimal Online Deterministic Algorithms and Adaptive
  * Heuristics for Energy and Performance Efficient Dynamic Consolidation of Virtual Machines in
  * Cloud Data Centers", Concurrency and Computation: Practice and Experience (CCPE), Volume 24,
- * Issue 13, Pages: 1397-1420, John Wiley & Sons, Ltd, New York, USA, 2012</a>
+ * Issue 13, Pages: 1397-1420, John Wiley &amp; Sons, Ltd, New York, USA, 2012</a>
  * </ul>
  * 
  * @author Anton Beloglazov
@@ -79,26 +80,26 @@ public class PowerDatacenter extends Datacenter {
 	@Override
 	protected void updateCloudletProcessing() {
 		if (getCloudletSubmitted() == -1 || getCloudletSubmitted() == CloudSim.clock()) {
-			CloudSim.cancelAll(getId(), new PredicateType(CloudSimTags.VM_DATACENTER_EVENT));
-			schedule(getId(), getSchedulingInterval(), CloudSimTags.VM_DATACENTER_EVENT);
+			CloudSim.cancelAll(getId(), new PredicateType(CloudActionTags.VM_DATACENTER_EVENT));
+			schedule(getId(), getSchedulingInterval(), CloudActionTags.VM_DATACENTER_EVENT);
 			return;
 		}
 		double currentTime = CloudSim.clock();
 
 		// if some time passed since last processing
 		if (currentTime > getLastProcessTime()) {
-			System.out.print(currentTime + " ");
+			Log.print(currentTime + " ");
 
 			double minTime = updateCloudetProcessingWithoutSchedulingFutureEventsForce();
 
 			if (!isDisableMigrations()) {
-				List<Map<String, Object>> migrationMap = getVmAllocationPolicy().optimizeAllocation(
+				List<GuestMapping> migrationMap = getVmAllocationPolicy().optimizeAllocation(
 						getVmList());
 
 				if (migrationMap != null) {
-					for (Map<String, Object> migrate : migrationMap) {
-						Vm vm = (Vm) migrate.get("vm");
-						PowerHost targetHost = (PowerHost) migrate.get("host");
+					for (GuestMapping migrate : migrationMap) {
+						Vm vm = (Vm) migrate.vm();
+						PowerHost targetHost = (PowerHost) migrate.host();
 						PowerHost oldHost = (PowerHost) vm.getHost();
 
 						if (oldHost == null) {
@@ -116,7 +117,7 @@ public class PowerDatacenter extends Datacenter {
 									targetHost.getId());
 						}
 
-						targetHost.addMigratingInVm(vm);
+						targetHost.addMigratingInGuest(vm);
 						incrementMigrationCount();
 
 						/** VM migration delay = RAM / bandwidth **/
@@ -126,7 +127,7 @@ public class PowerDatacenter extends Datacenter {
 						send(
 								getId(),
 								vm.getRam() / ((double) targetHost.getBw() / (2 * 8000)),
-								CloudSimTags.VM_MIGRATE,
+								CloudActionTags.VM_MIGRATE,
 								migrate);
 					}
 				}
@@ -134,8 +135,8 @@ public class PowerDatacenter extends Datacenter {
 
 			// schedules an event to the next time
 			if (minTime != Double.MAX_VALUE) {
-				CloudSim.cancelAll(getId(), new PredicateType(CloudSimTags.VM_DATACENTER_EVENT));
-				send(getId(), getSchedulingInterval(), CloudSimTags.VM_DATACENTER_EVENT);
+				CloudSim.cancelAll(getId(), new PredicateType(CloudActionTags.VM_DATACENTER_EVENT));
+				send(getId(), getSchedulingInterval(), CloudActionTags.VM_DATACENTER_EVENT);
 			}
 
 			setLastProcessTime(currentTime);
@@ -147,7 +148,7 @@ public class PowerDatacenter extends Datacenter {
 	 * 
 	 * @return the double
          * @see #updateCloudetProcessingWithoutSchedulingFutureEventsForce() 
-         * @todo There is an inconsistence in the return value of this
+         * //@TODO There is an inconsistence in the return value of this
          * method with return value of similar methods
          * such as {@link #updateCloudetProcessingWithoutSchedulingFutureEventsForce()},
          * that returns {@link Double#MAX_VALUE} by default.
@@ -172,13 +173,13 @@ public class PowerDatacenter extends Datacenter {
 		double timeDiff = currentTime - getLastProcessTime();
 		double timeFrameDatacenterEnergy = 0.0;
 
-		Log.printLine("\n\n--------------------------------------------------------------\n\n");
+		Log.println("\n\n--------------------------------------------------------------\n\n");
 		Log.formatLine("New resource usage for the time frame starting at %.2f:", currentTime);
 
 		for (PowerHost host : this.<PowerHost> getHostList()) {
-			Log.printLine();
+			Log.println();
 
-			double time = host.updateVmsProcessing(currentTime); // inform VMs to update processing
+			double time = host.updateCloudletsProcessing(currentTime); // inform VMs to update processing
 			if (time < minTime) {
 				minTime = time;
 			}
@@ -205,7 +206,7 @@ public class PowerDatacenter extends Datacenter {
 						timeDiff);
 				timeFrameDatacenterEnergy += timeFrameHostEnergy;
 
-				Log.printLine();
+				Log.println();
 				Log.formatLine(
 						"%.2f: [Host #%d] utilization at %.2f was %.2f%%, now is %.2f%%",
 						currentTime,
@@ -232,14 +233,14 @@ public class PowerDatacenter extends Datacenter {
 
 		/** Remove completed VMs **/
 		for (PowerHost host : this.<PowerHost> getHostList()) {
-			for (Vm vm : host.getCompletedVms()) {
-				getVmAllocationPolicy().deallocateHostForVm(vm);
+			for (GuestEntity vm : host.getCompletedVms()) {
+				getVmAllocationPolicy().deallocateHostForGuest(vm);
 				getVmList().remove(vm);
-				Log.printLine("VM #" + vm.getId() + " has been deallocated from host #" + host.getId());
+				Log.println("VM #" + vm.getId() + " has been deallocated from host #" + host.getId());
 			}
 		}
 
-		Log.printLine();
+		Log.println();
 
 		setLastProcessTime(currentTime);
 		return minTime;
@@ -249,7 +250,7 @@ public class PowerDatacenter extends Datacenter {
 	protected void processVmMigrate(SimEvent ev, boolean ack) {
 		updateCloudetProcessingWithoutSchedulingFutureEvents();
 		super.processVmMigrate(ev, ack);
-		SimEvent event = CloudSim.findFirstDeferred(getId(), new PredicateType(CloudSimTags.VM_MIGRATE));
+		SimEvent event = findFirstDeferred(new PredicateType(CloudActionTags.VM_MIGRATE));
 		if (event == null || event.eventTime() > CloudSim.clock()) {
 			updateCloudetProcessingWithoutSchedulingFutureEventsForce();
 		}
@@ -286,7 +287,7 @@ public class PowerDatacenter extends Datacenter {
 	 */
 	protected boolean isInMigration() {
 		boolean result = false;
-		for (Vm vm : getVmList()) {
+		for (GuestEntity vm : getVmList()) {
 			if (vm.isInMigration()) {
 				result = true;
 				break;

@@ -1,17 +1,26 @@
+/*
+ * Title: CloudSim Toolkit Description: CloudSim (Cloud Simulation) Toolkit for Modeling and
+ * Simulation of Clouds Licence: GPL - http://www.gnu.org/copyleft/gpl.html
+ *
+ * Copyright (c) 2009-2024, The University of Melbourne, Australia
+ */
+
 package org.cloudbus.cloudsim.container.resourceAllocatorMigrationEnabled;
 
-import org.cloudbus.cloudsim.container.containerSelectionPolicies.PowerContainerSelectionPolicy;
+import org.cloudbus.cloudsim.Host;
 import org.cloudbus.cloudsim.container.core.ContainerDatacenter;
-import org.cloudbus.cloudsim.container.core.ContainerHost;
-import org.cloudbus.cloudsim.container.core.ContainerVm;
-import org.cloudbus.cloudsim.container.core.PowerContainerHost;
-import org.cloudbus.cloudsim.container.hostSelectionPolicies.HostSelectionPolicy;
-import org.cloudbus.cloudsim.container.vmSelectionPolicies.PowerContainerVmSelectionPolicy;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.core.HostEntity;
+import org.cloudbus.cloudsim.core.PowerGuestEntity;
+import org.cloudbus.cloudsim.core.VirtualEntity;
+import org.cloudbus.cloudsim.selectionPolicies.SelectionPolicy;
+import org.cloudbus.cloudsim.power.PowerHost;
 
 import java.util.List;
 
 /**
  * Created by sareh on 18/08/15.
+ * Modified by Remo Andreoli (Feb 2024)
  */
 public class PowerContainerVmAllocationPolicyMigrationStaticThresholdMCUnderUtilized extends PowerContainerVmAllocationPolicyMigrationAbstractContainerHostSelectionUnderUtilizedAdded{
 
@@ -29,10 +38,10 @@ public class PowerContainerVmAllocationPolicyMigrationStaticThresholdMCUnderUtil
      * @param utilizationThreshold the utilization threshold
      */
     public PowerContainerVmAllocationPolicyMigrationStaticThresholdMCUnderUtilized(
-            List<? extends ContainerHost> hostList,
-            PowerContainerVmSelectionPolicy vmSelectionPolicy, PowerContainerSelectionPolicy containerSelectionPolicy,
-            HostSelectionPolicy hostSelectionPolicy, double utilizationThreshold, double underUtilizationThresh,
-            int numberOfVmTypes, int[] vmPes, float[] vmRam, long vmBw, long vmSize, double[] vmMips) {
+            List<? extends HostEntity> hostList,
+            SelectionPolicy<GuestEntity> vmSelectionPolicy, SelectionPolicy<PowerGuestEntity> containerSelectionPolicy,
+            SelectionPolicy<HostEntity> hostSelectionPolicy, double utilizationThreshold, double underUtilizationThresh,
+            int numberOfVmTypes, int[] vmPes, int[] vmRam, long vmBw, long vmSize, double[] vmMips) {
         super(hostList, vmSelectionPolicy, containerSelectionPolicy, hostSelectionPolicy,underUtilizationThresh,
         		 numberOfVmTypes, vmPes, vmRam, vmBw, vmSize, vmMips);
         setUtilizationThreshold(utilizationThreshold);
@@ -45,10 +54,10 @@ public class PowerContainerVmAllocationPolicyMigrationStaticThresholdMCUnderUtil
      * @return true, if is host over utilized
      */
     @Override
-    protected boolean isHostOverUtilized(PowerContainerHost host) {
+    protected boolean isHostOverUtilized(PowerHost host) {
         addHistoryEntry(host, getUtilizationThreshold());
         double totalRequestedMips = 0;
-        for (ContainerVm vm : host.getVmList()) {
+        for (VirtualEntity vm : host.<VirtualEntity>getGuestList()) {
             totalRequestedMips += vm.getCurrentRequestedTotalMips();
         }
         double utilization = totalRequestedMips / host.getTotalMips();
@@ -56,7 +65,7 @@ public class PowerContainerVmAllocationPolicyMigrationStaticThresholdMCUnderUtil
     }
 
     @Override
-    protected boolean isHostUnderUtilized(PowerContainerHost host) {
+    protected boolean isHostUnderUtilized(PowerHost host) {
         return false;
     }
 
@@ -77,11 +86,4 @@ public class PowerContainerVmAllocationPolicyMigrationStaticThresholdMCUnderUtil
     protected double getUtilizationThreshold() {
         return utilizationThreshold;
     }
-    @Override
-    public void setDatacenter(ContainerDatacenter datacenter) {
-        super.setDatacenter(datacenter);
-    }
-
-
-
 }

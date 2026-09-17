@@ -5,15 +5,13 @@ import java.util.List;
 
 import org.cloudbus.cloudsim.Cloudlet;
 import org.cloudbus.cloudsim.CloudletSchedulerTimeShared;
-import org.cloudbus.cloudsim.ResCloudlet;
-import org.cloudbus.cloudsim.core.CloudSim;
 
 /**
  * {@link GpuCloudletSchedulerTimeShared} extends
  * {@link CloudletSchedulerTimeShared} to schedule {@link GpuCloudlet}s.
- * 
+ *
  * @author Ahmad Siavashi
- * 
+ *
  */
 public class GpuCloudletSchedulerTimeShared extends CloudletSchedulerTimeShared implements GpuCloudletScheduler {
 
@@ -29,39 +27,15 @@ public class GpuCloudletSchedulerTimeShared extends CloudletSchedulerTimeShared 
 	}
 
 	@Override
-	public double cloudletSubmit(Cloudlet cloudlet, double fileTransferTime) {
-		ResGpuCloudlet rcl = new ResGpuCloudlet((GpuCloudlet) cloudlet);
-		rcl.setCloudletStatus(Cloudlet.INEXEC);
-		for (int i = 0; i < cloudlet.getNumberOfPes(); i++) {
-			rcl.setMachineAndPeId(0, i);
-		}
-
-		getCloudletExecList().add(rcl);
-
-		// use the current capacity to estimate the extra amount of
-		// time to file transferring. It must be added to the cloudlet length
-		double extraSize = getCapacity(getCurrentMipsShare()) * fileTransferTime;
-		long length = (long) (cloudlet.getCloudletLength() + extraSize);
-		cloudlet.setCloudletLength(length);
-
-		return cloudlet.getCloudletLength() / getCapacity(getCurrentMipsShare());
-	}
-
-	@Override
-	public void cloudletFinish(ResCloudlet rcl) {
-		ResGpuCloudlet rgcl = (ResGpuCloudlet) rcl;
-		if (!rgcl.hasGpuTask()) {
-			super.cloudletFinish(rcl);
+	public void cloudletFinish(Cloudlet cl) {
+		GpuCloudlet gcl = (GpuCloudlet) cl;
+		if (!gcl.hasGpuTask()) {
+			super.cloudletFinish(cl);
 		} else {
-			GpuTask gt = rgcl.getGpuTask();
-			getGpuTaskList().add(gt);
-			try {
-				rgcl.setCloudletStatus(GpuCloudlet.PAUSED);
-				getCloudletPausedList().add(rgcl);
-			} catch (Exception e) {
-				e.printStackTrace();
-				CloudSim.abruptallyTerminate();
-			}
+			// the host portion is done; hold the cloudlet until its GpuTask finishes
+			getGpuTaskList().add(gcl.getGpuTask());
+			gcl.updateStatus(Cloudlet.CloudletStatus.PAUSED);
+			getCloudletPausedList().add(gcl);
 		}
 	}
 
@@ -88,11 +62,11 @@ public class GpuCloudletSchedulerTimeShared extends CloudletSchedulerTimeShared 
 
 	@Override
 	public boolean notifyGpuTaskCompletion(GpuTask gt) {
-		for (ResCloudlet rcl : getCloudletPausedList()) {
-			ResGpuCloudlet rgcl = (ResGpuCloudlet) rcl;
-			if (rgcl.getGpuTask() == gt) {
-				rgcl.setCloudletStatus(GpuCloudlet.SUCCESS);
-				rgcl.finalizeCloudlet();
+		for (Cloudlet cl : getCloudletPausedList()) {
+			GpuCloudlet gcl = (GpuCloudlet) cl;
+			if (gcl.getGpuTask() == gt) {
+				gcl.updateStatus(Cloudlet.CloudletStatus.SUCCESS);
+				gcl.finalizeCloudlet();
 				return true;
 			}
 		}

@@ -1,24 +1,26 @@
+/*
+ * Title: CloudSim Toolkit Description: CloudSim (Cloud Simulation) Toolkit for Modeling and
+ * Simulation of Clouds Licence: GPL - http://www.gnu.org/copyleft/gpl.html
+ *
+ * Copyright (c) 2009-2024, The University of Melbourne, Australia
+ */
+
 package org.cloudbus.cloudsim.container.core;
 
-//import cloudSimGr.containerCloudSim.Experiments.HelperEx;
-//import cloudSimGr.containerCloudSim.Experiments.Paper1.RunnerAbs;
-import org.cloudbus.cloudsim.container.resourceAllocators.ContainerAllocationPolicy;
-import org.cloudbus.cloudsim.container.resourceAllocators.ContainerVmAllocationPolicy;
-import org.cloudbus.cloudsim.container.utils.CostumeCSVWriter;
-import org.cloudbus.cloudsim.Log;
-import org.cloudbus.cloudsim.Storage;
-import org.cloudbus.cloudsim.core.CloudSim;
-import org.cloudbus.cloudsim.core.CloudSimTags;
-import org.cloudbus.cloudsim.core.SimEvent;
+import org.cloudbus.cloudsim.*;
+import org.cloudbus.cloudsim.VmAllocationPolicy.GuestMapping;
+import org.cloudbus.cloudsim.container.utils.CustomCSVWriter;
+import org.cloudbus.cloudsim.core.*;
 import org.cloudbus.cloudsim.core.predicates.PredicateType;
+import org.cloudbus.cloudsim.power.PowerHost;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Created by sareh on 20/07/15.
+ * Modified by Remo Andreoli (Feb 2024)
  */
 public class PowerContainerDatacenter extends ContainerDatacenter {
 
@@ -54,9 +56,9 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
 
 
 
-    private CostumeCSVWriter vmMigrationWriter;
-    private CostumeCSVWriter containerMigrationWriter;
-    private CostumeCSVWriter datacenterEnergyWriter;
+    private CustomCSVWriter vmMigrationWriter;
+    private CustomCSVWriter containerMigrationWriter;
+    private CustomCSVWriter datacenterEnergyWriter;
 
     /**
      * Instantiates a new datacenter.
@@ -71,9 +73,9 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
      */
     public PowerContainerDatacenter(
             String name,
-            ContainerDatacenterCharacteristics characteristics,
-            ContainerVmAllocationPolicy vmAllocationPolicy,
-            ContainerAllocationPolicy containerAllocationPolicy,
+            DatacenterCharacteristics characteristics,
+            VmAllocationPolicy vmAllocationPolicy,
+            VmAllocationPolicy containerAllocationPolicy,
             List<Storage> storageList,
             double schedulingInterval, String experimentName, String logAddress) throws Exception {
         super(name, characteristics, vmAllocationPolicy, containerAllocationPolicy, storageList, schedulingInterval, experimentName, logAddress);
@@ -83,17 +85,17 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
         containerMigrationAddress = String.format("%s/ContainerMigration/%s/%s.csv",getLogAddress(), getExperimentName().substring(0,index) ,getExperimentName());
         String energyConsumptionAddress = String.format("%s/EnergyConsumption/%s/%s.csv", getLogAddress(), getExperimentName().substring(0,index) ,getExperimentName()) ;
         vmMigrationAddress = String.format("%s/ContainerMigration/%s/VM-%s.csv", getLogAddress(), getExperimentName().substring(0,index) ,getExperimentName());
-        setContainerMigrationWriter(new CostumeCSVWriter(containerMigrationAddress));
-        setVmMigrationWriter(new CostumeCSVWriter(vmMigrationAddress));
-        setDatacenterEnergyWriter(new CostumeCSVWriter(energyConsumptionAddress));
+        setContainerMigrationWriter(new CustomCSVWriter(containerMigrationAddress));
+        setVmMigrationWriter(new CustomCSVWriter(vmMigrationAddress));
+        setDatacenterEnergyWriter(new CustomCSVWriter(energyConsumptionAddress));
         setPower(0.0);
         setDisableVmMigrations(false);
         setCloudletSubmitted(-1);
         setVmMigrationCount(0);
-        setActiveHostList(new ArrayList<Double>());
-        setActiveVmList(new ArrayList<Double>());
-        setDatacenterEnergyList(new ArrayList<Double>());
-        setContainerMigrationList(new ArrayList<Double>());
+        setActiveHostList(new ArrayList<>());
+        setActiveVmList(new ArrayList<>());
+        setDatacenterEnergyList(new ArrayList<>());
+        setContainerMigrationList(new ArrayList<>());
         setNumberOfVms(0);
         setNumberOfContainers(0);
     }
@@ -110,27 +112,27 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
     protected void updateCloudletProcessing() {
 //        Log.printLine("Power data center is Updating the cloudlet processing");
         if (getCloudletSubmitted() == -1 || getCloudletSubmitted() == CloudSim.clock()) {
-            CloudSim.cancelAll(getId(), new PredicateType(CloudSimTags.VM_DATACENTER_EVENT));
-            schedule(getId(), getSchedulingInterval(), CloudSimTags.VM_DATACENTER_EVENT);
+            CloudSim.cancelAll(getId(), new PredicateType(CloudActionTags.VM_DATACENTER_EVENT));
+            schedule(getId(), getSchedulingInterval(), CloudActionTags.VM_DATACENTER_EVENT);
             return;
         }
         double currentTime = CloudSim.clock();
 
         // if some time passed since last processing
         if (currentTime > getLastProcessTime()) {
-            System.out.print(currentTime + " ");
+            Log.print(currentTime + " ");
 
             double minTime = updateCloudetProcessingWithoutSchedulingFutureEventsForce();
 
             if (!isDisableVmMigrations()) {
-                List<Map<String, Object>> migrationMap = getVmAllocationPolicy().optimizeAllocation(
-                        getContainerVmList());
+                List<GuestMapping> migrationMap = getVmAllocationPolicy().optimizeAllocation(
+                        getVmList());
                 int previousMigrationCount = getVmMigrationCount();
                 if (migrationMap != null) {
-                    for (Map<String, Object> migrate : migrationMap) {
-                        ContainerVm vm = (ContainerVm) migrate.get("vm");
-                        PowerContainerHost targetHost = (PowerContainerHost) migrate.get("host");
-                        PowerContainerHost oldHost = (PowerContainerHost) vm.getHost();
+                    for (GuestMapping migrate : migrationMap) {
+                        GuestEntity vm = migrate.vm();
+                        PowerHost targetHost = (PowerHost) migrate.host();
+                        PowerHost oldHost = vm.getHost();
 
                         if (oldHost == null) {
                             Log.formatLine(
@@ -146,7 +148,7 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
                                     oldHost.getId(),
                                     targetHost.getId());
                         }
-                        targetHost.addMigratingInContainerVm(vm);
+                        targetHost.addMigratingInGuest(vm);
                         incrementMigrationCount();
 
                         /** VM migration delay = RAM / bandwidth **/
@@ -156,12 +158,12 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
                         send(
                                 getId(),
                                 vm.getRam() / ((double) targetHost.getBw() / (2 * 8000)),
-                                CloudSimTags.VM_MIGRATE,
+                                CloudActionTags.VM_MIGRATE,
                                 migrate);
                     }
 
                 }
-                Log.printConcatLine(CloudSim.clock(), ": The number of Migrations is:  ", getVmMigrationCount() - previousMigrationCount);
+                Log.printlnConcat(CloudSim.clock(), ": The number of Migrations is:  ", getVmMigrationCount() - previousMigrationCount);
 //                String[] msg={Double.toString (CloudSim.clock()), Integer.toString (getVmMigrationCount() - previousMigrationCount)  } ;                   // <--declared statement
 //                try {
 //                    getVmMigrationWriter().writeTofile(msg);
@@ -173,8 +175,8 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
 
             // schedules an event to the next time
             if (minTime != Double.MAX_VALUE) {
-                CloudSim.cancelAll(getId(), new PredicateType(CloudSimTags.VM_DATACENTER_EVENT));
-                send(getId(), getSchedulingInterval(), CloudSimTags.VM_DATACENTER_EVENT);
+                CloudSim.cancelAll(getId(), new PredicateType(CloudActionTags.VM_DATACENTER_EVENT));
+                send(getId(), getSchedulingInterval(), CloudActionTags.VM_DATACENTER_EVENT);
             }
 
             setLastProcessTime(currentTime);
@@ -206,13 +208,13 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
         double timeDiff = currentTime - getLastProcessTime();
         double timeFrameDatacenterEnergy = 0.0;
 
-        Log.printLine("\n\n--------------------------------------------------------------\n\n");
+        Log.println("\n\n--------------------------------------------------------------\n\n");
         Log.formatLine("Power data center: New resource usage for the time frame starting at %.2f:", currentTime);
 
-        for (PowerContainerHost host : this.<PowerContainerHost>getHostList()) {
-            Log.printLine();
+        for (PowerHost host : this.<PowerHost>getHostList()) {
+            Log.println();
 
-            double time = host.updateContainerVmsProcessing(currentTime); // inform VMs to update processing
+            double time = host.updateCloudletsProcessing(currentTime); // inform VMs to update processing
             if (time < minTime) {
                 minTime = time;
             }
@@ -230,7 +232,7 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
                     getLastProcessTime(),
                     currentTime);
 
-            for (PowerContainerHost host : this.<PowerContainerHost>getHostList()) {
+            for (PowerHost host : this.<PowerHost>getHostList()) {
                 double previousUtilizationOfCpu = host.getPreviousUtilizationOfCpu();
                 double utilizationOfCpu = host.getUtilizationOfCpu();
                 double timeFrameHostEnergy = host.getEnergyLinearInterpolation(
@@ -239,7 +241,7 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
                         timeDiff);
                 timeFrameDatacenterEnergy += timeFrameHostEnergy;
 
-                Log.printLine();
+                Log.println();
                 Log.formatLine(
                         "%.2f: [Host #%d] utilization at %.2f was %.2f%%, now is %.2f%%",
                         currentTime,
@@ -276,14 +278,13 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
 
         int numberOfActiveHosts =0;
         /** Remove completed VMs **/
-        for (PowerContainerHost host : this.<PowerContainerHost>getHostList()) {
-            for (ContainerVm vm : host.getCompletedVms()) {
-                getVmAllocationPolicy().deallocateHostForVm(vm);
-                getContainerVmList().remove(vm);
-                Log.printLine(String.format("VM #%d has been deallocated from host #%d", vm.getId(), host.getId()));
+        for (PowerHost host : this.<PowerHost>getHostList()) {
+            for (GuestEntity vm : host.getCompletedVms()) {
+                getVmAllocationPolicy().deallocateHostForGuest(vm);
+                getVmList().remove(vm);
+                Log.println(String.format("VM #%d has been deallocated from host #%d", vm.getId(), host.getId()));
             }
-            if(host.getVmList().size() !=0){
-
+            if(!host.getGuestList().isEmpty()){
                 numberOfActiveHosts ++;
             }
         }
@@ -294,11 +295,11 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
         int numberOfContainers = getNumberOfContainers();
         /** Check how many containers are in the system up and running*/
         Log.print(String.format("The number of Containers Up and running is %d", numberOfContainers));
-        Log.printLine();
+        Log.println();
         Log.print(String.format("The number of Vms Up and running is %d", numberOfActiveVms));
-        Log.printLine();
+        Log.println();
         Log.print(String.format("The number of Hosts Up and running is %d", numberOfActiveHosts));
-        Log.printLine();
+        Log.println();
 
         setLastProcessTime(currentTime);
         return minTime;
@@ -313,7 +314,7 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
     protected void processVmMigrate(SimEvent ev, boolean ack) {
         updateCloudetProcessingWithoutSchedulingFutureEvents();
         super.processVmMigrate(ev, ack);
-        SimEvent event = CloudSim.findFirstDeferred(getId(), new PredicateType(CloudSimTags.VM_MIGRATE));
+        SimEvent event = findFirstDeferred(new PredicateType(CloudActionTags.VM_MIGRATE));
         if (event == null || event.eventTime() > CloudSim.clock()) {
             updateCloudetProcessingWithoutSchedulingFutureEventsForce();
         }
@@ -369,7 +370,7 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
      */
     protected boolean isInMigration() {
         boolean result = false;
-        for (ContainerVm vm : getContainerVmList()) {
+        for (VirtualEntity vm : this.<VirtualEntity>getVmList()) {
             if (vm.isInMigration()) {
                 result = true;
                 break;
@@ -439,20 +440,20 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
         setVmMigrationCount(getVmMigrationCount() + 1);
     }
 
-    public CostumeCSVWriter getContainerMigrationWriter() {
+    public CustomCSVWriter getContainerMigrationWriter() {
         return containerMigrationWriter;
     }
 
-    public void setContainerMigrationWriter(CostumeCSVWriter containerMigrationWriter) {
+    public void setContainerMigrationWriter(CustomCSVWriter containerMigrationWriter) {
         this.containerMigrationWriter = containerMigrationWriter;
     }
 
 
-    public CostumeCSVWriter getDatacenterEnergyWriter() {
-        return (CostumeCSVWriter) datacenterEnergyWriter;
+    public CustomCSVWriter getDatacenterEnergyWriter() {
+        return datacenterEnergyWriter;
     }
 
-    public void setDatacenterEnergyWriter(CostumeCSVWriter datacenterEnergyWriter) {
+    public void setDatacenterEnergyWriter(CustomCSVWriter datacenterEnergyWriter) {
         this.datacenterEnergyWriter = datacenterEnergyWriter;
     }
 
@@ -487,11 +488,11 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
         this.containerMigrationList = containerMigrationList;
     }
 
-    public CostumeCSVWriter getVmMigrationWriter() {
+    public CustomCSVWriter getVmMigrationWriter() {
         return vmMigrationWriter;
     }
 
-    public void setVmMigrationWriter(CostumeCSVWriter vmMigrationWriter) {
+    public void setVmMigrationWriter(CustomCSVWriter vmMigrationWriter) {
         this.vmMigrationWriter = vmMigrationWriter;
     }
 
@@ -499,16 +500,16 @@ public class PowerContainerDatacenter extends ContainerDatacenter {
     public void updateNumberOfVmsContainers() {
         setNumberOfVms(0);
         setNumberOfContainers(0);
-        List<ContainerVm> temp= new ArrayList<>();
-        for(ContainerHost host:getHostList()) {
-            for (ContainerVm vm : host.getVmList()) {
+        List<VirtualEntity> temp= new ArrayList<>();
+
+        for(HostEntity host : getHostList()) {
+            for (VirtualEntity vm : host.<VirtualEntity>getGuestList()) {
                 if (!temp.contains(vm)) {
                     int tempNumbers = this.getNumberOfVms() + 1;
                     setNumberOfVms(tempNumbers);
-                    tempNumbers = this.getNumberOfContainers() + vm.getNumberOfContainers();
+                    tempNumbers = this.getNumberOfContainers() + vm.getNumberOfGuests();
                     setNumberOfContainers(tempNumbers);
                     temp.add(vm);
-
                 }
             }
             }

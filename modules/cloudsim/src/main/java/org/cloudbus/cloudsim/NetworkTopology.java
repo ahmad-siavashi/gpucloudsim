@@ -35,7 +35,7 @@ import org.cloudbus.cloudsim.network.TopologicalNode;
  * @author Anton Beloglazov
  * @since CloudSim Toolkit 1.0
  * 
- * @todo The class only have static methods, that indicates it doesn't have to be instantiated.
+ * //@TODO The class only have static methods, that indicates it doesn't have to be instantiated.
  * In fact, it doesn't appear it is being instantiated anywhere.
  * A private default constructor would be created to avoid instantiation.
  */
@@ -78,19 +78,19 @@ public class NetworkTopology {
 	 * @post $none
 	 */
 	public static void buildNetworkTopology(String fileName) {
-		Log.printConcatLine("Topology file: ", fileName);
+		Log.printlnConcat("Topology file: ", fileName);
 
 		// try to find the file
 		GraphReaderBrite reader = new GraphReaderBrite();
 
 		try {
 			graph = reader.readGraphFile(fileName);
-			map = new HashMap<Integer, Integer>();
+			map = new HashMap<>();
 			generateMatrices();
 		} catch (IOException e) {
 			// problem with the file. Does not simulate network
-			Log.printLine("Problem in processing BRITE file. Network simulation is disabled. Error: "
-					+ e.getMessage());
+			Log.printlnConcat("Problem in processing BRITE file. Network simulation is disabled. Error: ",
+					 e.getMessage());
 		}
 
 	}
@@ -128,7 +128,7 @@ public class NetworkTopology {
 		}
 
 		if (map == null) {
-			map = new HashMap<Integer, Integer>();
+			map = new HashMap<>();
 		}
 
 		// maybe add the nodes
@@ -201,14 +201,14 @@ public class NetworkTopology {
 					if (!map.containsValue(briteID)) { // this BRITE node was already mapped?
 						map.put(cloudSimEntityID, briteID);
 					} else {
-						Log.printConcatLine("Error in network mapping. BRITE node ", briteID, " already in use.");
+						Log.printlnConcat("Error in network mapping. BRITE node ", briteID, " already in use.");
 					}
 				} else {
-					Log.printConcatLine("Error in network mapping. CloudSim entity ", cloudSimEntityID,
+					Log.printlnConcat("Error in network mapping. CloudSim entity ", cloudSimEntityID,
 							" already mapped.");
 				}
 			} catch (Exception e) {
-				Log.printConcatLine("Error in network mapping. CloudSim node ", cloudSimEntityID,
+				Log.printlnConcat("Error in network mapping. CloudSim node ", cloudSimEntityID,
 						" not mapped to BRITE node ", briteID, ".");
 			}
 		}
@@ -226,7 +226,7 @@ public class NetworkTopology {
 			try {
 				map.remove(cloudSimEntityID);
 			} catch (Exception e) {
-				Log.printConcatLine("Error in network unmapping. CloudSim node: ", cloudSimEntityID);
+				Log.printlnConcat("Error in network unmapping. CloudSim node: ", cloudSimEntityID);
 			}
 		}
 	}

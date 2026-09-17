@@ -33,7 +33,7 @@ public class RemoteGpuVmAllocationPolicySimple extends RemoteGpuVmAllocationPoli
 		if (!getVmTable().containsKey(vm.getUid())) {
 			Vgpu vgpu = ((GpuVm) vm).getVgpu();
 			if (vgpu == null) {
-				for (Host host : getHostList()) {
+				for (Host host : this.<Host>getHostList()) {
 					boolean result = allocateHostForVm(vm, host);
 					if (result) {
 						return true;
@@ -61,7 +61,7 @@ public class RemoteGpuVmAllocationPolicySimple extends RemoteGpuVmAllocationPoli
 				if (!isVgpuAllocated) {
 					return false;
 				}
-				for (Host host : getHostList()) {
+				for (Host host : this.<Host>getHostList()) {
 					if (allocateHostForVm(vm, host)) {
 						return true;
 					}

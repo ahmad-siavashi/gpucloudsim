@@ -23,27 +23,25 @@ import org.cloudbus.cloudsim.core.predicates.PredicateAny;
 import org.cloudbus.cloudsim.core.predicates.PredicateNone;
 
 /**
- * This class extends the CloudSimCore to enable network simulation in CloudSim. Also, it disables
- * all the network models from CloudSim, to provide a simpler simulation of networking. In the
- * network model used by CloudSim, a topology file written in BRITE format is used to describe the
- * network. Later, nodes in such file are mapped to CloudSim entities. Delay calculated from the
- * BRITE model are added to the messages send through CloudSim. Messages using the old model are
- * converted to the apropriate methods with the correct parameters.
+ *
+ * The main class of the simulation.
+ * It provides all the methods to start, pause and stop simulated entities.
+ * It stores and dispatches all the discrete events to be processed at run-time by the entities.
  * 
  * @author Rodrigo N. Calheiros
  * @author Anton Beloglazov
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 1.0
  */
 public class CloudSim {
 
 	/** The Constant CLOUDSIM_VERSION_STRING. */
-	private static final String CLOUDSIM_VERSION_STRING = "3.0";
+	private static final String CLOUDSIM_VERSION_STRING = "7.0";
 
 	/** The id of CIS entity. */
 	private static int cisId = -1;
 
 	/** The id of CloudSimShutdown entity. */
-	@SuppressWarnings("unused")
 	private static int shutdownId = -1;
 
 	/** The CIS object. */
@@ -53,7 +51,6 @@ public class CloudSim {
 	private static final int NOT_FOUND = -1;
 
 	/** The trace flag. */
-	@SuppressWarnings("unused")
 	private static boolean traceFlag = false;
 
 	/** The calendar. */
@@ -63,7 +60,7 @@ public class CloudSim {
 	private static double terminateAt = -1;
 
 	/** The minimal time between events. Events within shorter periods after the last event are discarded. */
-	private static double minTimeBetweenEvents = 0.1;
+	private static double minTimeBetweenEvents = 0.01;
 	
 	/**
 	 * Initialises all the common attributes.
@@ -106,13 +103,13 @@ public class CloudSim {
 	 * <p>
 	 * 
 	 * @param numUser the number of User Entities created. This parameters indicates that
-	 *            {@link gridsim.CloudSimShutdown} first waits for all user entities's
+	 *            {@link CloudSimShutdown} first waits for all user entities's
 	 *            END_OF_SIMULATION signal before issuing terminate signal to other entities
 	 * @param cal starting time for this simulation. If it is <tt>null</tt>, then the time will be
 	 *            taken from <tt>Calendar.getInstance()</tt>
 	 * @param traceFlag <tt>true</tt> if CloudSim trace need to be written
-	 * @see gridsim.CloudSimShutdown
-	 * @see CloudInformationService.CloudInformationService
+	 * @see CloudSimShutdown
+	 * @see CloudInformationService
 	 * @pre numUser >= 0
 	 * @post $none
 	 */
@@ -125,12 +122,9 @@ public class CloudSim {
 
 			// set all the above entity IDs
 			cisId = cis.getId();
-		} catch (IllegalArgumentException s) {
-			Log.printLine("CloudSim.init(): The simulation has been terminated due to an unexpected error");
-			Log.printLine(s.getMessage());
-		} catch (Exception e) {
-			Log.printLine("CloudSim.init(): The simulation has been terminated due to an unexpected error");
-			Log.printLine(e.getMessage());
+		} catch (Exception s) {
+			Log.println("CloudSim.init(): The simulation has been terminated due to an unexpected error");
+			Log.println(s.getMessage());
 		}
 	}
 
@@ -145,25 +139,25 @@ public class CloudSim {
 	 * <p>
 	 * 
 	 * @param numUser the number of User Entities created. This parameters indicates that
-	 *            {@link gridsim.CloudSimShutdown} first waits for all user entities's
+	 *            {@link CloudSimShutdown} first waits for all user entities's
 	 *            END_OF_SIMULATION signal before issuing terminate signal to other entities
 	 * @param cal starting time for this simulation. If it is <tt>null</tt>, then the time will be
 	 *            taken from <tt>Calendar.getInstance()</tt>
 	 * @param traceFlag <tt>true</tt> if CloudSim trace need to be written
-	 * @param periodBetweenEvents - the minimal period between events. Events within shorter periods
+	 * @param minTimeBetweenEvents - the minimal period between events. Events within shorter periods
 	 * after the last event are discarded.
-	 * @see gridsim.CloudSimShutdown
-	 * @see CloudInformationService.CloudInformationService
+	 * @see CloudSimShutdown
+	 * @see CloudInformationService
 	 * @pre numUser >= 0
 	 * @post $none
 	 */
-	public static void init(int numUser, Calendar cal, boolean traceFlag, double periodBetweenEvents) {
-	    if (periodBetweenEvents <= 0) {
-		throw new IllegalArgumentException("The minimal time between events should be positive, but is:" + periodBetweenEvents);
+	public static void init(int numUser, Calendar cal, boolean traceFlag, double minTimeBetweenEvents) {
+	    if (minTimeBetweenEvents <= 0) {
+		throw new IllegalArgumentException("The minimal time between events should be positive, but is:" + minTimeBetweenEvents);
 	    }
 	    
 	    init(numUser, cal, traceFlag);
-	    minTimeBetweenEvents = periodBetweenEvents;
+	    CloudSim.minTimeBetweenEvents = minTimeBetweenEvents;
 	}
 	
 	
@@ -178,12 +172,12 @@ public class CloudSim {
 	 * @return the last clock time
 	 * @throws NullPointerException This happens when creating this entity before initialising
 	 *             CloudSim package or this entity name is <tt>null</tt> or empty.
-	 * @see gridsim.CloudSim#init(int, Calendar, boolean)
+	 * @see CloudSim#init(int, Calendar, boolean)
 	 * @pre $none
 	 * @post $none
 	 */
 	public static double startSimulation() throws NullPointerException {
-		Log.printConcatLine("Starting CloudSim version ", CLOUDSIM_VERSION_STRING);
+		Log.printlnConcat("Starting CloudSim version ", CLOUDSIM_VERSION_STRING);
 		try {
 			double clock = run();
 
@@ -203,14 +197,13 @@ public class CloudSim {
 	}
 
 	/**
-	 * Stops Cloud Simulation (based on {@link Simulation#runStop()}). This should be only called if
+	 * Stops Cloud Simulation. This should be only called if
 	 * any of the user defined entities <b>explicitly</b> want to terminate simulation during
 	 * execution.
 	 * 
 	 * @throws NullPointerException This happens when creating this entity before initialising
 	 *             CloudSim package or this entity name is <tt>null</tt> or empty
-	 * @see gridsim.CloudSim#init(int, Calendar, boolean)
-	 * @see Simulation#runStop()
+	 * @see CloudSim#init(int, Calendar, boolean)
 	 * @pre $none
 	 * @post $none
 	 */
@@ -228,10 +221,9 @@ public class CloudSim {
 	 * 
 	 * @return true, if successful; false otherwise.
 	 */
-	public static boolean terminateSimulation() {
+	public static void terminateSimulation() {
 		running = false;
 		printMessage("Simulation: Reached termination time.");
-		return true;
 	}
 
 	/**
@@ -262,8 +254,6 @@ public class CloudSim {
 	 * Gets a new copy of initial simulation Calendar.
 	 * 
 	 * @return a new copy of Calendar object or if CloudSim hasn't been initialized
-	 * @see gridsim.CloudSim#init(int, Calendar, boolean, String[], String[], String)
-	 * @see gridsim.CloudSim#init(int, Calendar, boolean)
 	 * @pre $none
 	 * @post $none
 	 */
@@ -311,10 +301,8 @@ public class CloudSim {
 	private static List<SimEntity> entities;
 
 	/** The future event queue. */
-	protected static FutureQueue future;
+	protected static EventQueue future;
 
-	/** The deferred event queue. */
-	protected static DeferredQueue deferred;
 
 	/** 
          * The current simulation clock.
@@ -345,12 +333,11 @@ public class CloudSim {
 	 * start of the simulation.
 	 */
 	protected static void initialize() {
-		Log.printLine("Initialising...");
-		entities = new ArrayList<SimEntity>();
-		entitiesByName = new LinkedHashMap<String, SimEntity>();
-		future = new FutureQueue();
-		deferred = new DeferredQueue();
-		waitPredicates = new HashMap<Integer, Predicate>();
+		Log.println("Initialising...");
+		entities = new ArrayList<>();
+		entitiesByName = new LinkedHashMap<>();
+		future = new EventQueue();
+		waitPredicates = new HashMap<>();
 		clock = 0;
 		running = false;
 	}
@@ -429,8 +416,6 @@ public class CloudSim {
 	public static String getEntityName(int entityID) {
 		try {
 			return getEntity(entityID).getName();
-		} catch (IllegalArgumentException e) {
-			return null;
 		} catch (Exception e) {
 			return null;
 		}
@@ -459,8 +444,7 @@ public class CloudSim {
 	public static List<SimEntity> getEntityList() {
 		// create a new list to prevent the user from changing
 		// the list of entities used by Simulation
-		List<SimEntity> list = new LinkedList<SimEntity>();
-		list.addAll(entities);
+		List<SimEntity> list = new LinkedList<>(entities);
 		return list;
 	}
 
@@ -476,7 +460,7 @@ public class CloudSim {
 		SimEvent evt;
 		if (running) {
 			// Post an event to make this entity
-			evt = new SimEvent(SimEvent.CREATE, clock, 1, 0, 0, e);
+			evt = new SimEvent(SimEvent.CREATE, clock, 1, 0, CloudActionTags.BLANK, e);
 			future.addEvent(evt);
 		}
 		if (e.getId() == -1) { // Only add once!
@@ -506,57 +490,29 @@ public class CloudSim {
 	 * Internal method used to run one tick of the simulation. This method should <b>not</b> be
 	 * called in simulations.
 	 * 
-	 * @return true, if successful otherwise
-         * @todo If the method shouldn't be called by the user,
-         * it should be protected in any way, such as changing
-         * its visibility to package.
+	 * @return true if there are events to be processed, false if event queue is empty
 	 */
-	public static boolean runClockTick() {
+	private static boolean runClockTick() {
 		SimEntity ent;
-		boolean queue_empty;
-		
-		int entities_size = entities.size();
-
-		for (int i = 0; i < entities_size; i++) {
+		for (int i = 0; i < entities.size(); i++) {
 			ent = entities.get(i);
-			if (ent.getState() == SimEntity.RUNNABLE) {
+			if (ent.getState() == SimEntity.EntityStatus.RUNNABLE) {
 				ent.run();
 			}
 		}
-				
-		// If there are more future events then deal with them
-		if (future.size() > 0) {
-			List<SimEvent> toRemove = new ArrayList<SimEvent>();
-			Iterator<SimEvent> fit = future.iterator();
-			queue_empty = false;
-			SimEvent first = fit.next();
-			processEvent(first);
-			future.remove(first);
 
-			fit = future.iterator();
-
-			// Check if next events are at same time...
-			boolean trymore = fit.hasNext();
-			while (trymore) {
-				SimEvent next = fit.next();
-				if (next.eventTime() == first.eventTime()) {
-					processEvent(next);
-					toRemove.add(next);
-					trymore = fit.hasNext();
-				} else {
-					trymore = false;
-				}
-			}
-
-			future.removeAll(toRemove);
-
-		} else {
-			queue_empty = true;
+		if (future.isEmpty()) {
 			running = false;
-			printMessage("Simulation: No more future events");
+			printMessage(CloudSim.clock()+": Simulation: No more future events");
+			return false;
 		}
 
-		return queue_empty;
+		double clk = future.peek().eventTime();
+		while (!future.isEmpty() && future.peek().eventTime() == clk) {
+			dispatchEvent(future.poll());
+		}
+
+		return true;
 	}
 
 	/**
@@ -567,62 +523,53 @@ public class CloudSim {
 	}
 
 	/**
-	 * Used to hold an entity for some time.
-	 * 
-	 * @param src the src
-	 * @param delay the delay
-	 */
-	public static void hold(int src, long delay) {
-		SimEvent e = new SimEvent(SimEvent.HOLD_DONE, clock + delay, src);
-		future.addEvent(e);
-		entities.get(src).setState(SimEntity.HOLDING);
-	}
-
-	/**
 	 * Used to pause an entity for some time.
 	 * 
-	 * @param src the src
+	 * @param srcId the entity source id
 	 * @param delay the delay
 	 */
-	public static void pause(int src, double delay) {
-		SimEvent e = new SimEvent(SimEvent.HOLD_DONE, clock + delay, src);
+	public static void pause(int srcId, double delay) {
+		SimEvent e = new SimEvent(SimEvent.HOLD_DONE, clock + delay, srcId);
 		future.addEvent(e);
-		entities.get(src).setState(SimEntity.HOLDING);
+		entities.get(srcId).setState(SimEntity.EntityStatus.HOLDING);
 	}
 
 	/**
 	 * Used to send an event from one entity to another.
 	 * 
-	 * @param src the src
-	 * @param dest the dest
+	 * @param srcId the src
+	 * @param dstId the dest
 	 * @param delay the delay
 	 * @param tag the tag
 	 * @param data the data
 	 */
-	public static void send(int src, int dest, double delay, int tag, Object data) {
+	public static void send(int srcId, int dstId, double delay, CloudSimTags tag, Object data) {
 		if (delay < 0) {
 			throw new IllegalArgumentException("Send delay can't be negative.");
 		}
+		if(delay >= Double.MAX_VALUE) {
+			throw new RuntimeException("Send delay can't be infinite.");
+		}
 
-		SimEvent e = new SimEvent(SimEvent.SEND, clock + delay, src, dest, tag, data);
+		SimEvent e = new SimEvent(SimEvent.SEND, clock + delay, srcId, dstId, tag, data);
 		future.addEvent(e);
 	}
 
 	/**
 	 * Used to send an event from one entity to another, with priority in the queue.
 	 * 
-	 * @param src the src
-	 * @param dest the dest
+	 * @param srcId the src
+	 * @param dstId the dest
 	 * @param delay the delay
 	 * @param tag the tag
 	 * @param data the data
 	 */
-	public static void sendFirst(int src, int dest, double delay, int tag, Object data) {
+	public static void sendFirst(int srcId, int dstId, double delay, CloudSimTags tag, Object data) {
 		if (delay < 0) {
 			throw new IllegalArgumentException("Send delay can't be negative.");
 		}
 
-		SimEvent e = new SimEvent(SimEvent.SEND, clock + delay, src, dest, tag, data);
+		SimEvent e = new SimEvent(SimEvent.SEND, clock + delay, srcId, dstId, tag, data);
 		future.addEventFirst(e);
 	}
 
@@ -631,112 +578,52 @@ public class CloudSim {
 	 * to Sim_system. Only events that satisfy the predicate will be passed to the entity. This is
 	 * done to avoid unnecessary context switches.
 	 * 
-	 * @param src the src
+	 * @param srcId the src
 	 * @param p the p
 	 */
-	public static void wait(int src, Predicate p) {
-		entities.get(src).setState(SimEntity.WAITING);
+	public static void wait(int srcId, Predicate p) {
+		entities.get(srcId).setState(SimEntity.EntityStatus.WAITING);
 		if (p != SIM_ANY) {
 			// If a predicate has been used store it in order to check it
-			waitPredicates.put(src, p);
+			waitPredicates.put(srcId, p);
 		}
-	}
-
-	/**
-	 * Checks if events for a specific entity are present in the deferred event queue.
-	 * 
-	 * @param d the d
-	 * @param p the p
-	 * @return the int
-	 */
-	public static int waiting(int d, Predicate p) {
-		int count = 0;
-		SimEvent event;
-		Iterator<SimEvent> iterator = deferred.iterator();
-		while (iterator.hasNext()) {
-			event = iterator.next();
-			if ((event.getDestination() == d) && (p.match(event))) {
-				count++;
-			}
-		}
-		return count;
-	}
-
-	/**
-	 * Selects an event matching a predicate.
-	 * 
-	 * @param src the src
-	 * @param p the p
-	 * @return the sim event
-	 */
-	public static SimEvent select(int src, Predicate p) {
-		SimEvent ev = null;
-		Iterator<SimEvent> iterator = deferred.iterator();
-		while (iterator.hasNext()) {
-			ev = iterator.next();
-			if (ev.getDestination() == src && p.match(ev)) {
-				iterator.remove();
-				break;
-			}
-		}
-		return ev;
-	}
-
-	/**
-	 * Find first deferred event matching a predicate.
-	 * 
-	 * @param src the src
-	 * @param p the p
-	 * @return the sim event
-	 */
-	public static SimEvent findFirstDeferred(int src, Predicate p) {
-		SimEvent ev = null;
-		Iterator<SimEvent> iterator = deferred.iterator();
-		while (iterator.hasNext()) {
-			ev = iterator.next();
-			if (ev.getDestination() == src && p.match(ev)) {
-				break;
-			}
-		}
-		return ev;
 	}
 
 	/**
 	 * Removes an event from the event queue.
 	 * 
-	 * @param src the src
+	 * @param srcId the entity source id
 	 * @param p the p
 	 * @return the sim event
 	 */
-	public static SimEvent cancel(int src, Predicate p) {
-		SimEvent ev = null;
+	public static SimEvent cancel(int srcId, Predicate p) {
+		SimEvent ev;
 		Iterator<SimEvent> iter = future.iterator();
 		while (iter.hasNext()) {
 			ev = iter.next();
-			if (ev.getSource() == src && p.match(ev)) {
+			if (ev.getSourceId() == srcId && p.match(ev)) {
 				iter.remove();
-				break;
+				return ev;
 			}
 		}
-
-		return ev;
+		return null;
 	}
 
 	/**
 	 * Removes all events that match a given predicate from the future event queue returns true if
 	 * at least one event has been cancelled; false otherwise.
 	 * 
-	 * @param src the src
+	 * @param srcId the entity source id
 	 * @param p the p
 	 * @return true, if successful
 	 */
-	public static boolean cancelAll(int src, Predicate p) {
-		SimEvent ev = null;
+	public static boolean cancelAll(int srcId, Predicate p) {
+		SimEvent ev;
 		int previousSize = future.size();
 		Iterator<SimEvent> iter = future.iterator();
 		while (iter.hasNext()) {
 			ev = iter.next();
-			if (ev.getSource() == src && p.match(ev)) {
+			if (ev.getSourceId() == srcId && p.match(ev)) {
 				iter.remove();
 			}
 		}
@@ -748,13 +635,15 @@ public class CloudSim {
 	//
 
 	/**
-	 * Processes an event.
+	 * Dispatch event to destination entity
 	 * 
 	 * @param e the e
 	 */
-	private static void processEvent(SimEvent e) {
-		int dest, src;
-		SimEntity dest_ent;
+	private static void dispatchEvent(SimEvent e) {
+		int dstId = e.getDestinationId();
+		int srcId = e.getSourceId();
+		SimEntity destEnt = entities.get(dstId);
+
 		// Update the system's clock
 		if (e.eventTime() < clock) {
 			throw new IllegalArgumentException("Past event detected.");
@@ -763,49 +652,24 @@ public class CloudSim {
 
 		// Ok now process it
 		switch (e.getType()) {
-			case SimEvent.ENULL:
-				throw new IllegalArgumentException("Event has a null type.");
+			case SimEvent.ENULL -> throw new IllegalArgumentException("Event has a null type.");
+			case SimEvent.CREATE -> {
+				addEntityDynamically((SimEntity) e.getData());
+			}
+			case SimEvent.SEND -> {
+                if (destEnt.getState() == SimEntity.EntityStatus.WAITING) { // NOTE: this branch is never used
+                    Predicate p = waitPredicates.get(dstId);
 
-			case SimEvent.CREATE:
-				SimEntity newe = (SimEntity) e.getData();
-				addEntityDynamically(newe);
-				break;
-
-			case SimEvent.SEND:
-				// Check for matching wait
-				dest = e.getDestination();
-				if (dest < 0) {
-					throw new IllegalArgumentException("Attempt to send to a null entity detected.");
-				} else {
-					int tag = e.getTag();
-					dest_ent = entities.get(dest);
-					if (dest_ent.getState() == SimEntity.WAITING) {
-						Integer destObj = Integer.valueOf(dest);
-						Predicate p = waitPredicates.get(destObj);
-						if ((p == null) || (tag == 9999) || (p.match(e))) {
-							dest_ent.setEventBuffer((SimEvent) e.clone());
-							dest_ent.setState(SimEntity.RUNNABLE);
-							waitPredicates.remove(destObj);
-						} else {
-							deferred.addEvent(e);
-						}
-					} else {
-						deferred.addEvent(e);
-					}
-				}
-				break;
-
-			case SimEvent.HOLD_DONE:
-				src = e.getSource();
-				if (src < 0) {
-					throw new IllegalArgumentException("Null entity holding.");
-				} else {
-					entities.get(src).setState(SimEntity.RUNNABLE);
-				}
-				break;
-
-			default:
-				break;
+                    if ((p == null) || (p.match(e))) {
+                        destEnt.setState(SimEntity.EntityStatus.RUNNABLE);
+                        waitPredicates.remove(dstId);
+                    }
+                }
+				destEnt.getIncomingEvents().add(e);
+            }
+			case SimEvent.HOLD_DONE -> entities.get(srcId).setState(SimEntity.EntityStatus.RUNNABLE);
+			default -> {
+			}
 		}
 	}
 
@@ -884,7 +748,7 @@ public class CloudSim {
 			runStart();
 		}
 		while (true) {
-			if (runClockTick() || abruptTerminate) {
+			if (!runClockTick() || abruptTerminate) {
 				break;
 			}
 
@@ -896,8 +760,8 @@ public class CloudSim {
 			}
 
 			if (pauseAt != -1
-					&& ((future.size() > 0 && clock <= pauseAt && pauseAt <= future.iterator().next()
-							.eventTime()) || future.size() == 0 && pauseAt <= clock)) {
+					&& ((!future.isEmpty() && clock <= pauseAt && pauseAt <= future.peek()
+							.eventTime()) || future.isEmpty() && pauseAt <= clock)) {
 				pauseSimulation();
 				clock = pauseAt;
 			}
@@ -923,11 +787,11 @@ public class CloudSim {
 	 * Internal method that allows the entities to terminate. This method should <b>not</b> be used
 	 * in user simulations.
 	 */
-	public static void finishSimulation() {
+	private static void finishSimulation() {
 		// Allow all entities to exit their body method
 		if (!abruptTerminate) {
 			for (SimEntity ent : entities) {
-				if (ent.getState() != SimEntity.FINISHED) {
+				if (ent.getState() != SimEntity.EntityStatus.FINISHED) {
 					ent.run();
 				}
 			}
@@ -942,7 +806,6 @@ public class CloudSim {
 		entities = null;
 		entitiesByName = null;
 		future = null;
-		deferred = null;
 		clock = 0L;
 		running = false;
 
@@ -965,7 +828,7 @@ public class CloudSim {
 	 * @param message the message
 	 */
 	private static void printMessage(String message) {
-		Log.printLine(message);
+		Log.println(message);
 	}
 
 	/**

@@ -11,6 +11,7 @@ package org.cloudbus.cloudsim;
 import java.util.List;
 
 import org.cloudbus.cloudsim.core.CloudSim;
+import org.cloudbus.cloudsim.core.HostEntity;
 import org.cloudbus.cloudsim.lists.HostList;
 import org.cloudbus.cloudsim.lists.PeList;
 
@@ -23,8 +24,9 @@ import org.cloudbus.cloudsim.lists.PeList;
  * @author Rajkumar Buyya
  * @author Rodrigo N. Calheiros
  * @author Anton Beloglazov
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 1.0
- * @todo the characteristics are used only for datacenter (as the class name indicates),
+ * //@TODO the characteristics are used only for datacenter (as the class name indicates),
  * however, the class documentation uses the generic term "resource" instead of "datacenter",
  * giving the idea that the class can be used to describe characteristics of other resources.
  * However, the class was found being used only for datacenters.
@@ -41,7 +43,7 @@ public class DatacenterCharacteristics {
 	private String os;
 
 	/** The hosts owned by the datacenter. */
-	private List<? extends Host> hostList;
+	private List<? extends HostEntity> hostList;
 
 	/** The time zone, defined as the difference from GMT. */
 	private double timeZone;
@@ -53,7 +55,7 @@ public class DatacenterCharacteristics {
          * constants such as {@link #TIME_SHARED}
          * and {@link #SPACE_SHARED}.
          * 
-         * @todo The use of int constants difficult to know the valid values
+         * //@TODO The use of int constants difficult to know the valid values
          * for the property. It may be used a enum instead.
          */
 	private int allocationPolicy;
@@ -118,7 +120,7 @@ public class DatacenterCharacteristics {
 			String architecture,
 			String os,
 			String vmm,
-			List<? extends Host> hostList,
+			List<? extends HostEntity> hostList,
 			double timeZone,
 			double costPerSec,
 			double costPerMem,
@@ -128,7 +130,7 @@ public class DatacenterCharacteristics {
 		setArchitecture(architecture);
 		setOs(os);
 		setHostList(hostList);
-                /*@todo allocationPolicy is not a parameter. It is setting
+                /*//@TODO allocationPolicy is not a parameter. It is setting
                 the attribute to itself, what has not effect. */
 		setAllocationPolicy(allocationPolicy);
 		setCostPerSecond(costPerSec);
@@ -185,17 +187,17 @@ public class DatacenterCharacteristics {
          * 
 	 * @pre $none
 	 * @post $result >= -1
-         * @todo It considers that all PEs of all PM have the same MIPS capacity,
+         * //@TODO It considers that all PEs of all PM have the same MIPS capacity,
          * what is not ensured because it is possible to add PMs of different configurations
-         * to a datacenter. Even for the {@link Host} it is possible
-         * to add Pe's of different capacities through the {@link Host#peList} attribute.
+         * to a datacenter. Even for the {@link HostEntity} it is possible
+         * to add Pe's of different capacities through the {@link HostEntity#peList} attribute.
 	 */
 	public int getMipsOfOnePe() {
-		if (getHostList().size() == 0) {
+		if (getHostList().isEmpty()) {
 			return -1;
 		}
 
-                /*@todo Why is it always get the MIPS of the first host in the datacenter?
+                /*//@TODO Why is it always get the MIPS of the first host in the datacenter?
                 The note in the method states that it is considered that all PEs into
                 a PM have the same MIPS capacity, but different PM can have different
                 PEs' MIPS.*/
@@ -214,10 +216,10 @@ public class DatacenterCharacteristics {
 	 * @pre peID >= 0
 	 * @post $result >= -1
          * 
-         * @todo The id parameter would be renamed to pmId to be clear.
+         * //@TODO The id parameter would be renamed to pmId to be clear.
 	 */
 	public int getMipsOfOnePe(int id, int peId) {
-		if (getHostList().size() == 0) {
+		if (getHostList().isEmpty()) {
 			return -1;
 		}
 
@@ -243,7 +245,7 @@ public class DatacenterCharacteristics {
 	 */
 	public int getMips() {
 		int mips = 0;
-                /*@todo It assumes that the heterogeinety of PE's capacity of PMs
+                /*//@TODO It assumes that the heterogeinety of PE's capacity of PMs
                 is dependent of the CPU allocation policy of the Datacenter.
                 However, I don't see any relation between PMs heterogeinety and
                 allocation policy.
@@ -252,7 +254,7 @@ public class DatacenterCharacteristics {
                 The same is true for a space shared or even any other policy. 
                 */
                 
-                /*@todo the method doesn't use polymorphism to ensure that it will
+                /*//@TODO the method doesn't use polymorphism to ensure that it will
                 automatically behave according to the instance of the allocationPolicy used.
                 The use of a switch here breaks the Open/Close Principle (OCP).
                 Thus, it doesn't allow the class to be closed for changes
@@ -262,8 +264,8 @@ public class DatacenterCharacteristics {
                 */
 		switch (getAllocationPolicy()) {
                         // Assuming all PEs in all PMs have same rating.
-                        /*@todo But it is possible to add PMs of different configurations
-                            in a hostlist attached to a DatacenterCharacteristic attribute
+                        /*//@TODO But it is possible to add PMs of different configurations
+                            in a hostList attached to a DatacenterCharacteristic attribute
                             of a Datacenter*/
 			case DatacenterCharacteristics.TIME_SHARED:
 			case DatacenterCharacteristics.OTHER_POLICY_SAME_RATING:
@@ -274,7 +276,7 @@ public class DatacenterCharacteristics {
 			// But different PMs in a Cluster can have different rating
 			case DatacenterCharacteristics.SPACE_SHARED:
 			case DatacenterCharacteristics.OTHER_POLICY_DIFFERENT_RATING:
-				for (Host host : getHostList()) {
+				for (HostEntity host : getHostList()) {
 					mips += host.getTotalMips();
 				}
 			break;
@@ -290,7 +292,7 @@ public class DatacenterCharacteristics {
 	 * Gets the amount of CPU time (in seconds) that the cloudlet will spend
          * to finish processing, considering the current CPU allocation policy 
          * (currently only for TIME_SHARED) and cloudlet load. 
-         * @todo <tt>NOTE:</tt> The
+         * //@TODO <tt>NOTE:</tt> The
 	 * CPU time for SPACE_SHARED and ADVANCE_RESERVATION are not yet implemented.
 	 * 
 	 * @param cloudletLength the length of a Cloudlet
@@ -304,11 +306,10 @@ public class DatacenterCharacteristics {
 	public double getCpuTime(double cloudletLength, double load) {
 		double cpuTime = 0.0;
 
-		switch (getAllocationPolicy()) {
-			case DatacenterCharacteristics.TIME_SHARED:
-                                /*@todo It is not exacly clear what this method does.
+		if (getAllocationPolicy() == DatacenterCharacteristics.TIME_SHARED) {
+			/* //@TODO It is not exacly clear what this method does.
                                 I guess it computes how many time the cloudlet will
-                                spend using the CPU to finish its job, considering 
+                                spend using the CPU to finish its job, considering
                                 the CPU allocation policy. By this way,
                                 the load parameter may be cloudlet's the percentage of load (from 0 to 1).
                                 Then, (getMipsOfOnePe() * (1.0 - load)) computes the amount
@@ -316,18 +317,14 @@ public class DatacenterCharacteristics {
                                 Dividing the total cloudlet length in MI by that result
                                 returns the number of seconds that the cloudlet will spend
                                 to execute its total MI.
-                                
+
                                 This method has to be reviewed and documentation
                                 checked.
-                            
-                                If load is equals to 1, this calculation will 
+
+                                If load is equals to 1, this calculation will
                                 raise and division by zero exception, what makes invalid
                                 the pre condition defined in the method documention*/
-				cpuTime = cloudletLength / (getMipsOfOnePe() * (1.0 - load));
-				break;
-
-			default:
-				break;
+			cpuTime = cloudletLength / (getMipsOfOnePe() * (1.0 - load));
 		}
 
 		return cpuTime;
@@ -387,7 +384,7 @@ public class DatacenterCharacteristics {
 	 * @return the cost using CPU of PM in the Datacenter
 	 * @pre $none
 	 * @post $result >= 0.0
-         * @todo Again, it considers that all PEs of all PM have the same MIPS capacity,
+         * //@TODO Again, it considers that all PEs of all PM have the same MIPS capacity,
          * what is not ensured because it is possible to add PMs of different configurations
          * to a datacenter
 	 */
@@ -411,7 +408,7 @@ public class DatacenterCharacteristics {
 	 */
 	public int getNumberOfFailedHosts() {
 		int numberOfFailedHosts = 0;
-		for (Host host : getHostList()) {
+		for (HostEntity host : getHostList()) {
 			if (host.isFailed()) {
 				numberOfFailedHosts++;
 			}
@@ -425,10 +422,7 @@ public class DatacenterCharacteristics {
 	 * @return if all PMs are working, otherwise
 	 */
 	public boolean isWorking() {
-		boolean result = false;
-		if (getNumberOfFailedHosts() == 0) {
-			result = true;
-		}
+		boolean result = getNumberOfFailedHosts() == 0;
 
 		return result;
 	}
@@ -516,7 +510,7 @@ public class DatacenterCharacteristics {
 	 * 
 	 * @param id the new id
 	 */
-	protected void setId(int id) {
+	public void setId(int id) {
 		this.id = id;
 	}
 
@@ -561,10 +555,10 @@ public class DatacenterCharacteristics {
 	 * 
 	 * @param <T> the generic type
 	 * @return the host list
-         * @todo check this warning below
+         * //@TODO check this warning below
 	 */
 	@SuppressWarnings("unchecked")
-	public <T extends Host> List<T> getHostList() {
+	public <T extends HostEntity> List<T> getHostList() {
 		return (List<T>) hostList;
 	}
 
@@ -574,7 +568,7 @@ public class DatacenterCharacteristics {
 	 * @param <T> the generic type
 	 * @param hostList the new host list
 	 */
-	protected <T extends Host> void setHostList(List<T> hostList) {
+	protected <T extends HostEntity> void setHostList(List<T> hostList) {
 		this.hostList = hostList;
 	}
 

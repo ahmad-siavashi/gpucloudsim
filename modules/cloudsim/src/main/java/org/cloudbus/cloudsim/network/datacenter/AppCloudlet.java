@@ -3,7 +3,7 @@
  * Description:  CloudSim (Cloud Simulation) Toolkit for Modeling and Simulation of Clouds
  * Licence:      GPL - http://www.gnu.org/copyleft/gpl.html
  *
- * Copyright (c) 2009-2012, The University of Melbourne, Australia
+ * Copyright (c) 2009-2024, The University of Melbourne, Australia
  */
 
 package org.cloudbus.cloudsim.network.datacenter;
@@ -11,29 +11,19 @@ package org.cloudbus.cloudsim.network.datacenter;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.cloudbus.cloudsim.UtilizationModel;
-import org.cloudbus.cloudsim.UtilizationModelFull;
-import org.cloudbus.cloudsim.core.CloudSim;
+import org.cloudbus.cloudsim.Cloudlet;
 
 /**
  * AppCloudlet class represents an application which user submit for execution within a datacenter. It
- * consist of several {@link NetworkCloudlet NetworkCloudlets}.
+ * consist of several {@link NetworkCloudlet NetworkCloudlets}. The solely purpose of this class is to function
+ * as a wrapper to keep track of the cloudlets which model a certain workflow, the owner of the app and to check
+ * for deadline misses.
+ *
+ * @author Remo Andreoli
+ * @since CloudSim Toolkit 7.o
+ *
  * 
- * <br/>Please refer to following publication for more details:<br/>
- * <ul>
- * <li><a href="http://dx.doi.org/10.1109/UCC.2011.24">Saurabh Kumar Garg and Rajkumar Buyya, NetworkCloudSim: Modelling Parallel Applications in Cloud
- * Simulations, Proceedings of the 4th IEEE/ACM International Conference on Utility and Cloud
- * Computing (UCC 2011, IEEE CS Press, USA), Melbourne, Australia, December 5-7, 2011.</a>
- * </ul>
- * 
- * @author Saurabh Kumar Garg
- * @since CloudSim Toolkit 1.0
- * 
- * @todo If it is an application/cloudlet, it would extend the Cloudlet class.
- * In the case of Cloudlet class has more attributes and methods than
- * required by this class, a common interface would be created.
- * 
- * @todo The attributes have to be defined as private.
+ * //@TODO The attributes have to be defined as private.
  */
 public class AppCloudlet {
 
@@ -41,100 +31,66 @@ public class AppCloudlet {
 
 	public int appID;
 
-        /**
-         * The list of {@link NetworkCloudlet} that this AppCloudlet represents.
-         */
-	public ArrayList<NetworkCloudlet> clist;
-
-        /**
-         * This attribute doesn't appear to be used.
-         * Only the TestBagofTaskApp class is using it
-         * and such a class appears to be used only for not
-         * documented test (it is not a unit test).
-         */
-	public double deadline;
-
-        /**
-         * This attribute doesn't appear to be used.
-         */
-	public double accuracy;
-
-        /**
-         * Number of VMs the AppCloudlet can use.
-         * @todo the attribute would be renamed to numberOfVMs or something 
-         * like that.
-         */
-	public int numbervm;
-
-        /**
-         * Id of the AppCloudlet's owner.
-         */
 	public int userId;
 
         /**
-         * @todo It would be "execTime". This attribute is very strange.
-         * The the todo in the TestBagofTaskApp class.
+         * The list of {@link NetworkCloudlet} that this AppCloudlet represents.
          */
-	public double exeTime;
+	public ArrayList<NetworkCloudlet> cList;
 
-        /**
-         * This attribute doesn't appear to be used.
-         */
-	public int requestclass;
+	public double deadline;
 
-        public static final int APP_MC = 1;
+	public static final int APP_MC = 1;
 
 	public static final int APP_Workflow = 3;
 
-	public AppCloudlet(int type, int appID, double deadline, int numbervm, int userId) {
-		super();
+	public AppCloudlet(int type, int appID, double deadline, int userId) {
+		// Access these parameters from within cList, NOT the appCloudlet object
 		this.type = type;
 		this.appID = appID;
 		this.deadline = deadline;
-		this.numbervm = numbervm;
 		this.userId = userId;
-		clist = new ArrayList<NetworkCloudlet>();
+
+		cList = new ArrayList<>();
 	}
 
 	/**
-	 * An example of creating APPcloudlet
-	 * 
-	 * @param vmIdList VMs where Cloudlet will be executed
-         * @todo This method is very strange too. It creates the internal cloudlet list
-         * with cloudlets of hard-coded defined attributes, such as
-         * fileSize, outputSize and length, what doesn't make sense.
-         * If this class is to be an example, it should be 
-         * inside the example package. As an example, it make senses the
-         * hard-coded values.
+	 * Get all the cloudlets that starts the worklow activity
+	 * Assumption: the stages are in order of (sequential) execution
 	 */
-	public void createCloudletList(List<Integer> vmIdList) {
-		for (int i = 0; i < numbervm; i++) {
-			long length = 4;
-			long fileSize = 300;
-			long outputSize = 300;
-			long memory = 256;
-			int pesNumber = 4;
-			UtilizationModel utilizationModel = new UtilizationModelFull();
-			// HPCCloudlet cl=new HPCCloudlet();
-			NetworkCloudlet cl = new NetworkCloudlet(
-					NetworkConstants.currentCloudletId,
-					length,
-					pesNumber,
-					fileSize,
-					outputSize,
-					memory,
-					utilizationModel,
-					utilizationModel,
-					utilizationModel);
-			// setting the owner of these Cloudlets
-			NetworkConstants.currentCloudletId++;
-			cl.setUserId(userId);
-			cl.submittime = CloudSim.clock();
-			cl.currStagenum = -1;
-			clist.add(cl);
+	public List<NetworkCloudlet> getSourceCloudlets() {
+		return cList.stream()
+					.filter(networkCloudlet -> networkCloudlet.stages.getFirst().getType() != TaskStage.TaskStageStatus.WAIT_RECV)
+					.filter(networkCloudlet -> networkCloudlet.stages.getFirst().getType() != TaskStage.TaskStageStatus.WAIT_SEND)
+					.toList();
+	}
 
-		}
-		// based on type
+	/**
+	 * Get all the cloudlets that ends the worklow activity
+	 * Assumption: the stages are in order of (sequential) execution
+	 */
+	public List<NetworkCloudlet> getSinkCloudlets() {
+		return cList.stream()
+				.filter(networkCloudlet -> networkCloudlet.stages.getLast().getType() != TaskStage.TaskStageStatus.WAIT_RECV)
+				.filter(networkCloudlet -> networkCloudlet.stages.getLast().getType() != TaskStage.TaskStageStatus.WAIT_SEND)
+				.toList();
+	}
 
+	/**
+	 * Compute the lateness of the appCloudlet in function of the specified deadline.
+	 * A negative value express a deadline miss, a positive value express an early finish
+	 * @return lateness
+	 */
+	public double getLateness() {
+		double worstStartTime = getSinkCloudlets().stream()
+				.mapToDouble(Cloudlet::getExecStartTime).max().orElse(0.0);
+		double worstFinishTime = getSinkCloudlets().stream()
+				.mapToDouble(Cloudlet::getExecFinishTime).max().orElse(0.0);
+
+		return deadline - (worstFinishTime - worstStartTime);
+	}
+
+	public boolean isDeadlineMissed() {
+		return getLateness() < 0;
 	}
 }

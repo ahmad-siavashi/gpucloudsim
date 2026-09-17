@@ -10,8 +10,10 @@ import org.cloudbus.cloudsim.DatacenterBroker;
 import org.cloudbus.cloudsim.DatacenterCharacteristics;
 import org.cloudbus.cloudsim.Log;
 import org.cloudbus.cloudsim.Vm;
+import org.cloudbus.cloudsim.core.CloudActionTags;
 import org.cloudbus.cloudsim.core.CloudSim;
 import org.cloudbus.cloudsim.core.CloudSimTags;
+import org.cloudbus.cloudsim.core.GuestEntity;
 import org.cloudbus.cloudsim.core.SimEvent;
 import org.cloudbus.cloudsim.core.predicates.PredicateType;
 import org.cloudbus.cloudsim.gpu.core.GpuCloudSimTags;
@@ -34,6 +36,9 @@ public class GpuDatacenterBroker extends DatacenterBroker {
 	/** The number of submitted gpuCloudlets in each vm. */
 	private HashMap<String, Integer> vmGpuCloudletsSubmitted;
 
+	/** The number of VM destroy requests whose acknowledgement has not arrived yet. */
+	private int vmDestroyAcksPending;
+
 	/**
 	 * @see DatacenterBroker
 	 */
@@ -51,16 +56,15 @@ public class GpuDatacenterBroker extends DatacenterBroker {
 		super.finishExecution();
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	protected void createVmsInDatacenter(int datacenterId) {
 		// send as much vms as possible for this datacenter before trying the
 		// next one
 		int requestedVms = 0;
-		for (GpuVm vm : (List<GpuVm>) (List<?>) getVmList()) {
-			if (!getVmsToDatacentersMap().containsKey(vm.getId()) && !getVmsCreatedList().contains(vm)) {
+		for (GpuVm vm : this.<GpuVm>getGuestList()) {
+			if (!getVmsToDatacentersMap().containsKey(vm.getId()) && !getGuestsCreatedList().contains(vm)) {
 				getVmsToDatacentersMap().put(vm.getId(), datacenterId);
-				send(datacenterId, vm.getArrivalTime(), CloudSimTags.VM_CREATE_ACK, vm);
+				send(datacenterId, vm.getArrivalTime(), CloudActionTags.VM_CREATE_ACK, vm);
 				requestedVms++;
 			}
 		}
@@ -83,18 +87,18 @@ public class GpuDatacenterBroker extends DatacenterBroker {
 	}
 
 	@Override
-	protected void processVmCreate(SimEvent ev) {
+	protected void processVmCreateAck(SimEvent ev) {
 		int[] data = (int[]) ev.getData();
 		int datacenterId = data[0];
 		int vmId = data[1];
 		int result = data[2];
 
-		Vm vm = VmList.getById(getVmList(), vmId);
+		Vm vm = VmList.getById(getGuestList(), vmId);
 		String vmUid = vm.getUid();
 
 		if (result == CloudSimTags.TRUE) {
 			getVmsToDatacentersMap().put(vmId, datacenterId);
-			getVmsCreatedList().add(vm);
+			getGuestsCreatedList().add(vm);
 			setVmsAcks(getVmsAcks() + 1);
 
 			Log.printConcatLine(CloudSim.clock(), ": ", getName(), ": VM #", vmId, " has been created in Datacenter #",
@@ -130,7 +134,7 @@ public class GpuDatacenterBroker extends DatacenterBroker {
 			// Check for looping datacenters
 			if (getDatacenterIdsList().indexOf(nextDatacenterId) != 0) {
 				getVmsToDatacentersMap().replace(vmId, nextDatacenterId);
-				send(nextDatacenterId, CloudSim.getMinTimeBetweenEvents(), CloudSimTags.VM_CREATE_ACK, vm);
+				send(nextDatacenterId, CloudSim.getMinTimeBetweenEvents(), CloudActionTags.VM_CREATE_ACK, vm);
 			} else {
 				// Reject the VM
 				System.out.println(
@@ -157,23 +161,18 @@ public class GpuDatacenterBroker extends DatacenterBroker {
 		} else {
 			Log.printLine(CloudSim.clock() + ": Failed to destroy VM #" + vmId + " in Datacenter #" + datacenterId);
 		}
+		vmDestroyAcksPending--;
+		finishExecutionIfDone();
 	}
 
-	@Override
-	protected void processCloudletReturn(SimEvent ev) {
-		Cloudlet cloudlet = (Cloudlet) ev.getData();
-		getCloudletReceivedList().add(cloudlet);
-		Log.printConcatLine(CloudSim.clock(), ": ", getName(), ": Cloudlet ", cloudlet.getCloudletId(), " received");
-		GpuVm cloudletVm = (GpuVm) VmList.getByIdAndUserId(getVmList(), cloudlet.getVmId(), getId());
-		getVmGpuCloudletsSubmitted().replace(cloudletVm.getUid(),
-				getVmGpuCloudletsSubmitted().get(cloudletVm.getUid()) - 1);
-		cloudletsSubmitted--;
-		if (getVmGpuCloudletsSubmitted().get(cloudletVm.getUid()) == 0) {
-			sendNow(getVmsToDatacentersMap().get(cloudlet.getVmId()), CloudSimTags.VM_DESTROY_ACK, cloudletVm);
-			getVmsCreatedList().remove(cloudletVm);
-		}
-		// all cloudlets executed
-		if (getCloudletList().isEmpty() && cloudletsSubmitted == 0) {
+	/**
+	 * Finishes the execution once all cloudlets have returned and all VM destroy
+	 * acknowledgements have been received. Since CloudSim 7, a finished entity
+	 * can no longer receive events, so it must not shut down while acks are
+	 * still on their way.
+	 */
+	protected void finishExecutionIfDone() {
+		if (getCloudletList().isEmpty() && cloudletsSubmitted == 0 && vmDestroyAcksPending == 0) {
 			Log.printConcatLine(CloudSim.clock(), ": ", getName(), ": All Jobs executed. Finishing...");
 			clearDatacenters();
 			finishExecution();
@@ -181,21 +180,35 @@ public class GpuDatacenterBroker extends DatacenterBroker {
 	}
 
 	@Override
+	protected void processCloudletReturn(SimEvent ev) {
+		Cloudlet cloudlet = (Cloudlet) ev.getData();
+		getCloudletReceivedList().add(cloudlet);
+		Log.printConcatLine(CloudSim.clock(), ": ", getName(), ": Cloudlet ", cloudlet.getCloudletId(), " received");
+		GpuVm cloudletVm = VmList.getByIdAndUserId(getGuestList(), cloudlet.getVmId(), getId());
+		getVmGpuCloudletsSubmitted().replace(cloudletVm.getUid(),
+				getVmGpuCloudletsSubmitted().get(cloudletVm.getUid()) - 1);
+		cloudletsSubmitted--;
+		if (getVmGpuCloudletsSubmitted().get(cloudletVm.getUid()) == 0) {
+			sendNow(getVmsToDatacentersMap().get(cloudlet.getVmId()), CloudActionTags.VM_DESTROY_ACK, cloudletVm);
+			vmDestroyAcksPending++;
+			getGuestsCreatedList().remove(cloudletVm);
+		}
+		finishExecutionIfDone();
+	}
+
+	@Override
 	protected void processOtherEvent(SimEvent ev) {
-		switch (ev.getTag()) {
 		// VM Destroy answer
-		case CloudSimTags.VM_DESTROY_ACK:
+		if (ev.getTag() == CloudActionTags.VM_DESTROY_ACK) {
 			processVmDestroy(ev);
-			break;
-		default:
+		} else {
 			super.processOtherEvent(ev);
-			break;
 		}
 	}
 
 	protected void submitGpuCloudlet(GpuCloudlet gpuCloudlet) {
 		int datacenterId = getVmsToDatacentersMap().get(gpuCloudlet.getVmId());
-		sendNow(datacenterId, CloudSimTags.CLOUDLET_SUBMIT, gpuCloudlet);
+		sendNow(datacenterId, CloudActionTags.CLOUDLET_SUBMIT, gpuCloudlet);
 		getCloudletSubmittedList().add(gpuCloudlet);
 		cloudletsSubmitted++;
 	}
@@ -208,14 +221,14 @@ public class GpuDatacenterBroker extends DatacenterBroker {
 	@Override
 	public void submitCloudletList(List<? extends Cloudlet> list) {
 		getCloudletList().addAll(list);
-		if (getVmList().isEmpty()) {
+		if (getGuestList().isEmpty()) {
 			throw new IllegalArgumentException("no vm submitted.");
 		}
 		for (Cloudlet cloudlet : getCloudletList()) {
 			if (cloudlet.getVmId() < 0) {
 				throw new IllegalArgumentException("cloudlet (#" + cloudlet.getCloudletId() + ") has no VM.");
 			}
-			Vm vm = VmList.getById(getVmList(), cloudlet.getVmId());
+			GpuVm vm = VmList.getById(getGuestList(), cloudlet.getVmId());
 			if (vm == null) {
 				throw new IllegalArgumentException("no such vm (Id #" + cloudlet.getVmId() + ") exists for cloudlet (#"
 						+ cloudlet.getCloudletId() + ")");
@@ -225,9 +238,9 @@ public class GpuDatacenterBroker extends DatacenterBroker {
 	}
 
 	@Override
-	public void submitVmList(List<? extends Vm> list) {
-		super.submitVmList(list);
-		for (Vm vm : vmList) {
+	public void submitGuestList(List<? extends GuestEntity> list) {
+		super.submitGuestList(list);
+		for (GuestEntity vm : getGuestList()) {
 			if (!getVmGpuCloudletMap().containsKey(vm.getUid())) {
 				getVmGpuCloudletMap().put(vm.getUid(), new ArrayList<>());
 			}

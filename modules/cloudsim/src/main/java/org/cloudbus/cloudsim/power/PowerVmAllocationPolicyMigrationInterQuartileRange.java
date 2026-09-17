@@ -12,7 +12,8 @@ import java.util.List;
 
 import org.cloudbus.cloudsim.Host;
 import org.cloudbus.cloudsim.Log;
-import org.cloudbus.cloudsim.Vm;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.selectionPolicies.SelectionPolicy;
 import org.cloudbus.cloudsim.util.MathUtil;
 
 /**
@@ -26,7 +27,7 @@ import org.cloudbus.cloudsim.util.MathUtil;
  * <li><a href="http://dx.doi.org/10.1002/cpe.1867">Anton Beloglazov, and Rajkumar Buyya, "Optimal Online Deterministic Algorithms and Adaptive
  * Heuristics for Energy and Performance Efficient Dynamic Consolidation of Virtual Machines in
  * Cloud Data Centers", Concurrency and Computation: Practice and Experience (CCPE), Volume 24,
- * Issue 13, Pages: 1397-1420, John Wiley & Sons, Ltd, New York, USA, 2012</a>
+ * Issue 13, Pages: 1397-1420, John Wiley &amp; Sons, Ltd, New York, USA, 2012</a>
  * </ul>
  * 
  * @author Anton Beloglazov
@@ -66,7 +67,7 @@ public class PowerVmAllocationPolicyMigrationInterQuartileRange extends
 	 */
 	public PowerVmAllocationPolicyMigrationInterQuartileRange(
 			List<? extends Host> hostList,
-			PowerVmSelectionPolicy vmSelectionPolicy,
+			SelectionPolicy<GuestEntity> vmSelectionPolicy,
 			double safetyParameter,
 			PowerVmAllocationPolicyMigrationAbstract fallbackVmAllocationPolicy,
 			double utilizationThreshold) {
@@ -84,7 +85,7 @@ public class PowerVmAllocationPolicyMigrationInterQuartileRange extends
 	 */
 	public PowerVmAllocationPolicyMigrationInterQuartileRange(
 			List<? extends Host> hostList,
-			PowerVmSelectionPolicy vmSelectionPolicy,
+			SelectionPolicy<GuestEntity> vmSelectionPolicy,
 			double safetyParameter,
 			PowerVmAllocationPolicyMigrationAbstract fallbackVmAllocationPolicy) {
 		super(hostList, vmSelectionPolicy);
@@ -100,16 +101,15 @@ public class PowerVmAllocationPolicyMigrationInterQuartileRange extends
 	 */
 	@Override
 	protected boolean isHostOverUtilized(PowerHost host) {
-		PowerHostUtilizationHistory _host = (PowerHostUtilizationHistory) host;
-		double upperThreshold = 0;
+        double upperThreshold = 0;
 		try {
-			upperThreshold = 1 - getSafetyParameter() * getHostUtilizationIqr(_host);
+			upperThreshold = 1 - getSafetyParameter() * getHostUtilizationIqr((PowerHost) host);
 		} catch (IllegalArgumentException e) {
 			return getFallbackVmAllocationPolicy().isHostOverUtilized(host);
 		}
 		addHistoryEntry(host, upperThreshold);
 		double totalRequestedMips = 0;
-		for (Vm vm : host.getVmList()) {
+		for (GuestEntity vm : host.getGuestList()) {
 			totalRequestedMips += vm.getCurrentRequestedTotalMips();
 		}
 		double utilization = totalRequestedMips / host.getTotalMips();
@@ -122,7 +122,7 @@ public class PowerVmAllocationPolicyMigrationInterQuartileRange extends
 	 * @param host the host
 	 * @return the host CPU utilization percentage IQR
 	 */
-	protected double getHostUtilizationIqr(PowerHostUtilizationHistory host) throws IllegalArgumentException {
+	protected double getHostUtilizationIqr(PowerHost host) throws IllegalArgumentException {
 		double[] data = host.getUtilizationHistory();
 		if (MathUtil.countNonZeroBeginning(data) >= 12) { // 12 has been suggested as a safe value
 			return MathUtil.iqr(data);
@@ -137,7 +137,7 @@ public class PowerVmAllocationPolicyMigrationInterQuartileRange extends
 	 */
 	protected void setSafetyParameter(double safetyParameter) {
 		if (safetyParameter < 0) {
-			Log.printConcatLine("The safety parameter cannot be less than zero. The passed value is: ",
+			Log.printlnConcat("The safety parameter cannot be less than zero. The passed value is: ",
 					safetyParameter);
 			System.exit(0);
 		}

@@ -1,11 +1,22 @@
+/*
+ * Title: CloudSim Toolkit Description: CloudSim (Cloud Simulation) Toolkit for Modeling and
+ * Simulation of Clouds Licence: GPL - http://www.gnu.org/copyleft/gpl.html
+ *
+ * Copyright (c) 2009-2024, The University of Melbourne, Australia
+ */
+
 package org.cloudbus.cloudsim.container.resourceAllocatorMigrationEnabled;
-import org.cloudbus.cloudsim.container.core.*;
-import org.cloudbus.cloudsim.container.vmSelectionPolicies.PowerContainerVmSelectionPolicy;
+import org.cloudbus.cloudsim.Host;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.core.VirtualEntity;
+import org.cloudbus.cloudsim.power.PowerHost;
+import org.cloudbus.cloudsim.selectionPolicies.SelectionPolicy;
 
 import java.util.List;
 
 /**
  * Created by sareh on 30/07/15.
+ * Modified by Remo Andreoli (Feb 2024)
  */
 public class PowerContainerVmAllocationPolicyMigrationStaticThreshold extends PowerContainerVmAllocationPolicyMigrationAbstract {
 
@@ -20,8 +31,8 @@ public class PowerContainerVmAllocationPolicyMigrationStaticThreshold extends Po
      * @param utilizationThreshold the utilization threshold
      */
     public PowerContainerVmAllocationPolicyMigrationStaticThreshold(
-            List<? extends ContainerHost> hostList,
-            PowerContainerVmSelectionPolicy vmSelectionPolicy,
+            List<? extends Host> hostList,
+            SelectionPolicy<GuestEntity> vmSelectionPolicy,
             double utilizationThreshold) {
         super(hostList, vmSelectionPolicy);
         setUtilizationThreshold(utilizationThreshold);
@@ -34,10 +45,10 @@ public class PowerContainerVmAllocationPolicyMigrationStaticThreshold extends Po
      * @return true, if is host over utilized
      */
     @Override
-    protected boolean isHostOverUtilized(PowerContainerHost host) {
+    protected boolean isHostOverUtilized(PowerHost host) {
         addHistoryEntry(host, getUtilizationThreshold());
         double totalRequestedMips = 0;
-        for (ContainerVm vm : host.getVmList()) {
+        for (VirtualEntity vm : host.<VirtualEntity>getGuestList()) {
             totalRequestedMips += vm.getCurrentRequestedTotalMips();
         }
         double utilization = totalRequestedMips / host.getTotalMips();
@@ -45,7 +56,7 @@ public class PowerContainerVmAllocationPolicyMigrationStaticThreshold extends Po
     }
 
     @Override
-    protected boolean isHostUnderUtilized(PowerContainerHost host) {
+    protected boolean isHostUnderUtilized(PowerHost host) {
         return false;
     }
 
@@ -65,10 +76,5 @@ public class PowerContainerVmAllocationPolicyMigrationStaticThreshold extends Po
      */
     protected double getUtilizationThreshold() {
         return utilizationThreshold;
-    }
-
-    @Override
-    public void setDatacenter(ContainerDatacenter datacenter) {
-
     }
 }

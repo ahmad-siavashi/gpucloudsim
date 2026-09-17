@@ -8,8 +8,6 @@
 
 package org.cloudbus.cloudsim.power;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,8 +15,11 @@ import java.util.List;
 import org.cloudbus.cloudsim.Pe;
 import org.cloudbus.cloudsim.power.models.PowerModelLinear;
 import org.cloudbus.cloudsim.provisioners.PeProvisionerSimple;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * @author		Anton Beloglazov
@@ -33,9 +34,9 @@ public class PowerHostTest {
 	
 	private PowerHost host;
 	
-	@Before
+	@BeforeEach
 	public void setUp() throws Exception {
-		List<Pe> peList = new ArrayList<Pe>();
+		List<Pe> peList = new ArrayList<>();
 		peList.add(new Pe(0, new PeProvisionerSimple(MIPS)));
 		host = new PowerHost(0, null, null, 0, peList, null, new PowerModelLinear(MAX_POWER, STATIC_POWER_PERCENT));
 	}

@@ -12,6 +12,8 @@ import java.util.List;
 
 import org.cloudbus.cloudsim.Host;
 import org.cloudbus.cloudsim.Vm;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.selectionPolicies.SelectionPolicy;
 
 /**
  * A VM allocation policy that uses a Static CPU utilization Threshold (THR) to detect host over
@@ -24,7 +26,7 @@ import org.cloudbus.cloudsim.Vm;
  * <li><a href="http://dx.doi.org/10.1002/cpe.1867">Anton Beloglazov, and Rajkumar Buyya, "Optimal Online Deterministic Algorithms and Adaptive
  * Heuristics for Energy and Performance Efficient Dynamic Consolidation of Virtual Machines in
  * Cloud Data Centers", Concurrency and Computation: Practice and Experience (CCPE), Volume 24,
- * Issue 13, Pages: 1397-1420, John Wiley & Sons, Ltd, New York, USA, 2012</a>
+ * Issue 13, Pages: 1397-1420, John Wiley &amp; Sons, Ltd, New York, USA, 2012</a>
  * </ul>
  * 
  * @author Anton Beloglazov
@@ -46,7 +48,7 @@ public class PowerVmAllocationPolicyMigrationStaticThreshold extends PowerVmAllo
 	 */
 	public PowerVmAllocationPolicyMigrationStaticThreshold(
 			List<? extends Host> hostList,
-			PowerVmSelectionPolicy vmSelectionPolicy,
+			SelectionPolicy<GuestEntity> vmSelectionPolicy,
 			double utilizationThreshold) {
 		super(hostList, vmSelectionPolicy);
 		setUtilizationThreshold(utilizationThreshold);
@@ -62,7 +64,7 @@ public class PowerVmAllocationPolicyMigrationStaticThreshold extends PowerVmAllo
 	protected boolean isHostOverUtilized(PowerHost host) {
 		addHistoryEntry(host, getUtilizationThreshold());
 		double totalRequestedMips = 0;
-		for (Vm vm : host.getVmList()) {
+		for (GuestEntity vm : host.getGuestList()) {
 			totalRequestedMips += vm.getCurrentRequestedTotalMips();
 		}
 		double utilization = totalRequestedMips / host.getTotalMips();

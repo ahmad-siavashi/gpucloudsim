@@ -16,7 +16,7 @@ import org.cloudbus.cloudsim.examples.power.RunnerAbstract;
  * Anton Beloglazov, and Rajkumar Buyya, "Optimal Online Deterministic Algorithms and Adaptive
  * Heuristics for Energy and Performance Efficient Dynamic Consolidation of Virtual Machines in
  * Cloud Data Centers", Concurrency and Computation: Practice and Experience (CCPE), Volume 24,
- * Issue 13, Pages: 1397-1420, John Wiley & Sons, Ltd, New York, USA, 2012
+ * Issue 13, Pages: 1397-1420, John Wiley &amp; Sons, Ltd, New York, USA, 2012
  * 
  * @author Anton Beloglazov
  * @since Jan 5, 2012
@@ -73,7 +73,7 @@ public class PlanetLabRunner extends RunnerAbstract {
 			hostList = Helper.createHostList(PlanetLabConstants.NUMBER_OF_HOSTS);
 		} catch (Exception e) {
 			e.printStackTrace();
-			Log.printLine("The simulation has been terminated due to an unexpected error");
+			Log.println("The simulation has been terminated due to an unexpected error");
 			System.exit(0);
 		}
 	}

@@ -11,7 +11,8 @@ package org.cloudbus.cloudsim.power;
 import java.util.List;
 
 import org.cloudbus.cloudsim.Host;
-import org.cloudbus.cloudsim.Vm;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.selectionPolicies.SelectionPolicy;
 import org.cloudbus.cloudsim.util.MathUtil;
 
 /**
@@ -25,7 +26,7 @@ import org.cloudbus.cloudsim.util.MathUtil;
  * <li><a href="http://dx.doi.org/10.1002/cpe.1867">Anton Beloglazov, and Rajkumar Buyya, "Optimal Online Deterministic Algorithms and Adaptive
  * Heuristics for Energy and Performance Efficient Dynamic Consolidation of Virtual Machines in
  * Cloud Data Centers", Concurrency and Computation: Practice and Experience (CCPE), Volume 24,
- * Issue 13, Pages: 1397-1420, John Wiley & Sons, Ltd, New York, USA, 2012</a>
+ * Issue 13, Pages: 1397-1420, John Wiley &amp; Sons, Ltd, New York, USA, 2012</a>
  * </ul>
  * 
  * @author Anton Beloglazov
@@ -68,7 +69,7 @@ public class PowerVmAllocationPolicyMigrationLocalRegression extends PowerVmAllo
 	 */
 	public PowerVmAllocationPolicyMigrationLocalRegression(
 			List<? extends Host> hostList,
-			PowerVmSelectionPolicy vmSelectionPolicy,
+			SelectionPolicy<GuestEntity> vmSelectionPolicy,
 			double safetyParameter,
 			double schedulingInterval,
 			PowerVmAllocationPolicyMigrationAbstract fallbackVmAllocationPolicy,
@@ -89,7 +90,7 @@ public class PowerVmAllocationPolicyMigrationLocalRegression extends PowerVmAllo
 	 */
 	public PowerVmAllocationPolicyMigrationLocalRegression(
 			List<? extends Host> hostList,
-			PowerVmSelectionPolicy vmSelectionPolicy,
+			SelectionPolicy<GuestEntity> vmSelectionPolicy,
 			double safetyParameter,
 			double schedulingInterval,
 			PowerVmAllocationPolicyMigrationAbstract fallbackVmAllocationPolicy) {
@@ -107,8 +108,7 @@ public class PowerVmAllocationPolicyMigrationLocalRegression extends PowerVmAllo
 	 */
 	@Override
 	protected boolean isHostOverUtilized(PowerHost host) {
-		PowerHostUtilizationHistory _host = (PowerHostUtilizationHistory) host;
-		double[] utilizationHistory = _host.getUtilizationHistory();
+        double[] utilizationHistory = host.getUtilizationHistory();
 		int length = 10; // we use 10 to make the regression responsive enough to latest values
 		if (utilizationHistory.length < length) {
 			return getFallbackVmAllocationPolicy().isHostOverUtilized(host);
@@ -123,7 +123,7 @@ public class PowerVmAllocationPolicyMigrationLocalRegression extends PowerVmAllo
 		} catch (IllegalArgumentException e) {
 			return getFallbackVmAllocationPolicy().isHostOverUtilized(host);
 		}
-		double migrationIntervals = Math.ceil(getMaximumVmMigrationTime(_host) / getSchedulingInterval());
+		double migrationIntervals = Math.ceil(getMaximumVmMigrationTime((PowerHost) host) / getSchedulingInterval());
 		double predictedUtilization = estimates[0] + estimates[1] * (length + migrationIntervals);
 		predictedUtilization *= getSafetyParameter();
 
@@ -150,7 +150,7 @@ public class PowerVmAllocationPolicyMigrationLocalRegression extends PowerVmAllo
 	 */
 	protected double getMaximumVmMigrationTime(PowerHost host) {
 		int maxRam = Integer.MIN_VALUE;
-		for (Vm vm : host.getVmList()) {
+		for (GuestEntity vm : host.getGuestList()) {
 			int ram = vm.getRam();
 			if (ram > maxRam) {
 				maxRam = ram;

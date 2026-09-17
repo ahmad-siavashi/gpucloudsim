@@ -7,23 +7,31 @@
 
 package org.cloudbus.cloudsim;
 
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.core.HostEntity;
+import org.cloudbus.cloudsim.core.VirtualEntity;
+import org.cloudbus.cloudsim.lists.PeList;
+import org.cloudbus.cloudsim.provisioners.BwProvisioner;
+import org.cloudbus.cloudsim.provisioners.RamProvisioner;
+
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
 /**
- * Represents a Virtual Machine (VM) that runs inside a Host, sharing a hostList with other VMs. It processes
- * cloudlets. This processing happens according to a policy, defined by the CloudletScheduler. Each
- * VM has a owner, which can submit cloudlets to the VM to execute them.
+ * Represents a Virtual Machine (VM) that runs inside a Host, sharing a hostList with other VMs. It can have nested
+ * guest entities running inside. It processes cloudlets. This processing happens according to a policy,
+ * defined by the CloudletScheduler. Each VM has a owner, which can submit cloudlets to the VM to execute them.
  * 
  * @author Rodrigo N. Calheiros
  * @author Anton Beloglazov
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 1.0
  */
-public class Vm {
+public class Vm implements VirtualEntity {
 
 	/** The VM unique id. */
-	private int id;
+	private final int id;
 
 	/** The user id. */
 	private int userId;
@@ -52,11 +60,20 @@ public class Vm {
 	/** The Cloudlet scheduler the VM uses to schedule cloudlets execution. */
 	private CloudletScheduler cloudletScheduler;
 
+	/** The Guest scheduler the Vm uses to schedule nested guest entities, such as containers. */
+	private VmScheduler guestScheduler;
+
 	/** The PM that hosts the VM. */
-	private Host host;
+	private HostEntity host;
 
 	/** Indicates if the VM is in migration process. */
 	private boolean inMigration;
+	
+	/** Indicates if the VM is in Pause State (e.g. Stop & copy phase) */
+	private boolean inPause;
+
+	/** Indicates if the VM is waiting for nested guest entities to come. */
+	private boolean inWaiting;
 
 	/** The current allocated storage size. */
 	private long currentAllocatedSize;
@@ -67,21 +84,43 @@ public class Vm {
 	/** The current allocated bw. */
 	private long currentAllocatedBw;
 
-	/** The current allocated mips for each VM's PE. */
+	/** The current allocated mips for each VM's PE.
+	 * @TODO: Maybe replace with a call to getCloudletScheduler().getCurrentMipsShare()
+	 */
 	private List<Double> currentAllocatedMips;
 
 	/** Indicates if the VM is being instantiated. */
 	private boolean beingInstantiated;
 
-	/** The mips allocation history. 
-         * @todo Instead of using a list, this attribute would be 
-         * a map, where the key can be the history time
-         * and the value the history itself. 
-         * By this way, if one wants to get the history for a given
-         * time, he/she doesn't have to iterate over the entire list
-         * to find the desired entry.
-         */
-	private final List<VmStateHistoryEntry> stateHistory = new LinkedList<VmStateHistoryEntry>();
+	/** The ram provisioner for (nested) guest entities. */
+	private RamProvisioner guestRamProvisioner;
+
+	/** The bw provisioner for (nested) guest entities. */
+	private BwProvisioner guestBwProvisioner;
+
+	/** The pe list for nested guest entities. */
+	private List<? extends Pe> peList;
+
+	/** The nested guest list. */
+	private final List<? extends GuestEntity> guestList = new ArrayList<>();
+
+	/** The nested guests migrating in. */
+	private final List<? extends GuestEntity> guestsMigratingIn = new ArrayList<>();
+
+	/** Tells whether this VM is working properly (as a host for nested guests) or has failed. */
+	private boolean failed;
+
+	/** The mips allocation history.
+	 * @TODO Instead of using a list, this attribute would be
+	 * a map, where the key can be the history time
+	 * and the value the history itself.
+	 * By this way, if one wants to get the history for a given
+	 * time, he/she doesn't have to iterate over the entire list
+	 * to find the desired entry.
+	 */
+	private final List<VmStateHistoryEntry> stateHistory = new LinkedList<>();
+
+	private int virtualizationOverhead;
 
 	/**
 	 * Creates a new Vm object.
@@ -95,7 +134,7 @@ public class Vm {
 	 * @param size The size the VM image size (the amount of storage it will use, at least initially).
 	 * @param vmm virtual machine monitor
 	 * @param cloudletScheduler cloudletScheduler policy for cloudlets scheduling
-         * 
+	 *
 	 * @pre id >= 0
 	 * @pre userId >= 0
 	 * @pre size > 0
@@ -116,9 +155,9 @@ public class Vm {
 			long size,
 			String vmm,
 			CloudletScheduler cloudletScheduler) {
-		setId(id);
+		this.id = id;
 		setUserId(userId);
-		setUid(getUid(userId, id));
+		setUid(GuestEntity.getUid(userId, id));
 		setMips(mips);
 		setNumberOfPes(numberOfPes);
 		setRam(ram);
@@ -128,12 +167,69 @@ public class Vm {
 		setCloudletScheduler(cloudletScheduler);
 
 		setInMigration(false);
+		setInPause(false);
 		setBeingInstantiated(true);
 
 		setCurrentAllocatedBw(0);
 		setCurrentAllocatedMips(null);
 		setCurrentAllocatedRam(0);
 		setCurrentAllocatedSize(0);
+	}
+
+	/**
+	 * Create a new VM object that is capable to host nested guest entities
+	 * @param id
+	 * @param userId
+	 * @param mips
+	 * @param numberOfPes
+	 * @param ram
+	 * @param bw
+	 * @param size
+	 * @param vmm
+	 * @param cloudletScheduler
+	 * @param guestScheduler
+	 * @param containerRamProvisioner
+	 * @param containerBwProvisioner
+	 * @param peList
+	 */
+	public Vm(
+			int id,
+			int userId,
+			double mips,
+			int numberOfPes,
+			int ram,
+			long bw,
+			long size,
+			String vmm,
+			CloudletScheduler cloudletScheduler,
+			VmScheduler guestScheduler,
+			RamProvisioner containerRamProvisioner,
+			BwProvisioner containerBwProvisioner,
+			List<? extends Pe> peList
+	) {
+		this(id, userId, mips, peList.size(), ram, bw, size, vmm, cloudletScheduler);
+		if (numberOfPes != peList.size()) {
+			throw new RuntimeException("numberOfPes != peList.size");
+		}
+
+		if (PeList.getTotalMips(peList) > mips) {
+			throw new RuntimeException("PeList.getTotalMips(peList) > mips");
+		}
+
+		if (containerRamProvisioner.getRam() > getRam()) {
+			throw new RuntimeException("ramProvisioner.ram > ram");
+		}
+
+		if (containerBwProvisioner.getBw() > getBw()) {
+			throw new RuntimeException("bwProvisioner.bw > bw");
+		}
+		
+		setGuestScheduler(guestScheduler);
+
+		setPeList(peList);
+		setGuestRamProvisioner(containerRamProvisioner);
+		setGuestBwProvisioner(containerBwProvisioner);
+		setVirtualizationOverhead(0);
 	}
 
 	/**
@@ -146,55 +242,96 @@ public class Vm {
 	 * @pre currentTime >= 0
 	 * @post $none
 	 */
-	public double updateVmProcessing(double currentTime, List<Double> mipsShare) {
+	public double updateCloudletsProcessing(double currentTime, List<Double> mipsShare) {
+		double smallerTime = Double.MAX_VALUE;
+
 		if (mipsShare != null) {
-			return getCloudletScheduler().updateVmProcessing(currentTime, mipsShare);
+			// Cloudlets hosted here
+			double time1 = getCloudletScheduler().updateCloudletsProcessing(currentTime, mipsShare);
+			if (time1 < smallerTime) {
+				smallerTime = time1;
+			}
+
+			// Cloudlets hosted in nested guests (if any)
+			for (GuestEntity guest : getGuestList()) {
+				double time2 = guest.updateCloudletsProcessing(currentTime, getGuestScheduler().getAllocatedMipsForGuest(guest));
+				if (time2 > 0 && time2 < smallerTime) {
+					smallerTime = time2;
+				}
+			}
+
+			return smallerTime;
 		}
 		return 0.0;
 	}
 
 	/**
-	 * Gets the current requested mips.
-	 * 
+	 * Requests updating of cloudlets' processing within the (possibly nested) guests running in this host.
+	 * @param currentTime the current time
+	 * @return
+	 */
+	public double updateCloudletsProcessing(double currentTime) {
+		double smallerTime = Double.MAX_VALUE;
+
+		for (GuestEntity guest : getGuestList()) {
+			double time = guest.updateCloudletsProcessing(currentTime, getGuestScheduler().getAllocatedMipsForGuest(guest));
+			if (time > 0.0 && time < smallerTime) {
+				smallerTime = time;
+			}
+			double totalRequestedMips = guest.getCurrentRequestedTotalMips();
+			double totalAllocatedMips = getGuestScheduler().getTotalAllocatedMipsForGuest(guest);
+			guest.addStateHistoryEntry(
+					currentTime,
+					totalAllocatedMips,
+					totalRequestedMips,
+					(guest.isInMigration() && !getGuestsMigratingIn().contains(guest)));
+		}
+
+		return smallerTime;
+	}
+
+	@Deprecated
+	public double updateVmProcessing(double currentTime, List<Double> mipsShare) {
+		return updateCloudletsProcessing(currentTime, mipsShare);
+	}
+
+	/**
+	 * Gets the current requested mips .
+	 *
 	 * @return the current requested mips
 	 */
 	public List<Double> getCurrentRequestedMips() {
-		List<Double> currentRequestedMips = getCloudletScheduler().getCurrentRequestedMips();
+		List<Double> currentRequestedMips;
+
 		if (isBeingInstantiated()) {
-			currentRequestedMips = new ArrayList<Double>();
+			currentRequestedMips = new ArrayList<>(getNumberOfPes());
 			for (int i = 0; i < getNumberOfPes(); i++) {
 				currentRequestedMips.add(getMips());
 			}
+		} else {
+			currentRequestedMips = getCloudletScheduler().getCurrentRequestedMips();
+			for (GuestEntity guest : getGuestList()) {
+				currentRequestedMips.addAll(guest.getCurrentRequestedMips());
+			}
 		}
+
 		return currentRequestedMips;
 	}
 
-	/**
-	 * Gets the current requested total mips.
-	 * 
-	 * @return the current requested total mips
-	 */
+	@Override
 	public double getCurrentRequestedTotalMips() {
-		double totalRequestedMips = 0;
-		for (double mips : getCurrentRequestedMips()) {
-			totalRequestedMips += mips;
-		}
-		return totalRequestedMips;
-	}
+		double currentRequestedMips = 0.0;
 
-	/**
-	 * Gets the current requested max mips among all virtual PEs.
-	 * 
-	 * @return the current requested max mips
-	 */
-	public double getCurrentRequestedMaxMips() {
-		double maxMips = 0;
-		for (double mips : getCurrentRequestedMips()) {
-			if (mips > maxMips) {
-				maxMips = mips;
+		if (isBeingInstantiated()) {
+			currentRequestedMips += getMips() * getNumberOfPes();
+		} else {
+			currentRequestedMips += getCloudletScheduler().getCurrentRequestedTotalMips();
+			for (GuestEntity guest : getGuestList()) {
+				currentRequestedMips += guest.getCurrentRequestedTotalMips();
 			}
 		}
-		return maxMips;
+
+		return currentRequestedMips;
 	}
 
 	/**
@@ -206,7 +343,13 @@ public class Vm {
 		if (isBeingInstantiated()) {
 			return getBw();
 		}
-		return (long) (getCloudletScheduler().getCurrentRequestedUtilizationOfBw() * getBw());
+
+		long requestedBwTemp = (long) (getCloudletScheduler().getCurrentRequestedUtilizationOfBw() * getBw());
+		for (GuestEntity guest : getGuestList()) {
+			requestedBwTemp += guest.getCurrentRequestedBw();
+		}
+
+		return requestedBwTemp;
 	}
 
 	/**
@@ -218,7 +361,13 @@ public class Vm {
 		if (isBeingInstantiated()) {
 			return getRam();
 		}
-		return (int) (getCloudletScheduler().getCurrentRequestedUtilizationOfRam() * getRam());
+
+		int requestedRamTemp = (int) (getCloudletScheduler().getCurrentRequestedUtilizationOfRam() * getRam());
+		for (GuestEntity guest : getGuestList()) {
+			requestedRamTemp += guest.getCurrentRequestedRam();
+		}
+
+		return requestedRamTemp;
 	}
 
 	/**
@@ -228,7 +377,12 @@ public class Vm {
 	 * @return total utilization percentage
 	 */
 	public double getTotalUtilizationOfCpu(double time) {
-		return getCloudletScheduler().getTotalUtilizationOfCpu(time);
+		double TotalUtilizationOfCpuTemp = getCloudletScheduler().getTotalUtilizationOfCpu(time);
+		for (GuestEntity guest : getGuestList()) {
+			TotalUtilizationOfCpuTemp += guest.getTotalUtilizationOfCpu(time);
+		}
+
+		return TotalUtilizationOfCpuTemp;
 	}
 
 	/**
@@ -243,376 +397,193 @@ public class Vm {
 	}
 
 	/**
-	 * Sets the uid.
-	 * 
-	 * @param uid the new uid
-	 */
-	public void setUid(String uid) {
-		this.uid = uid;
-	}
-
-	/**
-	 * Gets unique string identifier of the VM.
-	 * 
-	 * @return string uid
-	 */
-	public String getUid() {
-		return uid;
-	}
-
-	/**
-	 * Generate unique string identifier of the VM.
-	 * 
-	 * @param userId the user id
-	 * @param vmId the vm id
-	 * @return string uid
-	 */
-	public static String getUid(int userId, int vmId) {
-		return userId + "-" + vmId;
-	}
-
-	/**
-	 * Gets the VM id.
-	 * 
-	 * @return the id
-	 */
-	public int getId() {
-		return id;
-	}
-
-	/**
-	 * Sets the VM id.
-	 * 
-	 * @param id the new id
-	 */
-	protected void setId(int id) {
-		this.id = id;
-	}
-
-	/**
-	 * Sets the user id.
-	 * 
-	 * @param userId the new user id
-	 */
-	protected void setUserId(int userId) {
-		this.userId = userId;
-	}
-
-	/**
-	 * Gets the ID of the owner of the VM.
-	 * 
-	 * @return VM's owner ID
+	 * Returns the MIPS share of each Pe that is allocated to a given guest entity.
+	 *
+	 * @param guest the guest entity
+	 * @return a list containing the amount of MIPS of each pe that is available to the guest
 	 * @pre $none
 	 * @post $none
 	 */
-	public int getUserId() {
-		return userId;
+	public List<Double> getAllocatedMipsForGuest(GuestEntity guest) {
+		return getGuestScheduler().getAllocatedMipsForGuest(guest);
 	}
 
 	/**
-	 * Gets the mips.
-	 * 
-	 * @return the mips
+	 * Gets the total allocated MIPS for a guest entity over all the PEs.
+	 *
+	 * @param guest the guest entity
+	 * @return the allocated mips for guest
 	 */
-	public double getMips() {
-		return mips;
+	public double getTotalAllocatedMipsForGuest(GuestEntity guest) {
+		return getGuestScheduler().getTotalAllocatedMipsForGuest(guest);
 	}
 
-	/**
-	 * Sets the mips.
-	 * 
-	 * @param mips the new mips
-	 */
-	protected void setMips(double mips) {
-		this.mips = mips;
-	}
+	public CloudletScheduler getCloudletScheduler() { return cloudletScheduler; }
 
-	/**
-	 * Gets the number of pes.
-	 * 
-	 * @return the number of pes
-	 */
-	public int getNumberOfPes() {
-		return numberOfPes;
-	}
+	@Override
+	public int getVirtualizationOverhead() { return virtualizationOverhead; }
 
-	/**
-	 * Sets the number of pes.
-	 * 
-	 * @param numberOfPes the new number of pes
-	 */
-	protected void setNumberOfPes(int numberOfPes) {
-		this.numberOfPes = numberOfPes;
-	}
+	@Override
+	public void setVirtualizationOverhead(int overhead) { virtualizationOverhead = overhead; }
 
-	/**
-	 * Gets the amount of ram.
-	 * 
-	 * @return amount of ram
-	 * @pre $none
-	 * @post $none
-	 */
-	public int getRam() {
-		return ram;
-	}
+	public void setCloudletScheduler(CloudletScheduler cloudletScheduler) { this.cloudletScheduler = cloudletScheduler; }
 
-	/**
-	 * Sets the amount of ram.
-	 * 
-	 * @param ram new amount of ram
-	 * @pre ram > 0
-	 * @post $none
-	 */
-	public void setRam(int ram) {
-		this.ram = ram;
-	}
+	public VmScheduler getGuestScheduler() { return guestScheduler; }
+	public void setGuestScheduler(VmScheduler guestScheduler) { this.guestScheduler = guestScheduler; }
 
-	/**
-	 * Gets the amount of bandwidth.
-	 * 
-	 * @return amount of bandwidth
-	 * @pre $none
-	 * @post $none
-	 */
-	public long getBw() {
-		return bw;
-	}
+	public int getId() { return id; }
 
-	/**
-	 * Sets the amount of bandwidth.
-	 * 
-	 * @param bw new amount of bandwidth
-	 * @pre bw > 0
-	 * @post $none
-	 */
-	public void setBw(long bw) {
-		this.bw = bw;
-	}
+	public long getBw() { return bw; }
+	public void setBw(long bw) { this.bw = bw; }
 
-	/**
-	 * Gets the amount of storage.
-	 * 
-	 * @return amount of storage
-	 * @pre $none
-	 * @post $none
-	 */
-	public long getSize() {
-		return size;
-	}
+	public int getRam() { return ram; }
+	public void setRam(int ram) { this.ram = ram; }
 
-	/**
-	 * Sets the amount of storage.
-	 * 
-	 * @param size new amount of storage
-	 * @pre size > 0
-	 * @post $none
-	 */
-	public void setSize(long size) {
-		this.size = size;
-	}
+	public int getNumberOfPes() { return numberOfPes; }
+	public void setNumberOfPes(int numberOfPes) { this.numberOfPes = numberOfPes; }
 
-	/**
-	 * Gets the VMM.
-	 * 
-	 * @return VMM
-	 * @pre $none
-	 * @post $none
-	 */
-	public String getVmm() {
-		return vmm;
-	}
+	public double getMips() { return mips; }
+	public void setMips(double mips) { this.mips = mips; }
 
-	/**
-	 * Sets the VMM.
-	 * 
-	 * @param vmm the new VMM
-	 */
-	protected void setVmm(String vmm) {
-		this.vmm = vmm;
-	}
+	public long getSize() { return size; }
+	public void setSize(long size) { this.size = size; }
 
-	/**
-	 * Sets the host that runs this VM.
-	 * 
-	 * @param host Host running the VM
-	 * @pre host != $null
-	 * @post $none
-	 */
-	public void setHost(Host host) {
-		this.host = host;
-	}
+	public String getUid() { return uid; }
+	public void setUid(String uid) { this.uid = uid; }
 
-	/**
-	 * Gets the host.
-	 * 
-	 * @return the host
-	 */
-	public Host getHost() {
-		return host;
-	}
+	public int getUserId() { return userId; }
+	public void setUserId(int userId) { this.userId = userId; }
 
-	/**
-	 * Gets the vm scheduler.
-	 * 
-	 * @return the vm scheduler
-	 */
-	public CloudletScheduler getCloudletScheduler() {
-		return cloudletScheduler;
-	}
+	public String getVmm() { return vmm; }
+	public void setVmm(String vmm) { this.vmm = vmm; }
 
-	/**
-	 * Sets the vm scheduler.
-	 * 
-	 * @param cloudletScheduler the new vm scheduler
-	 */
-	protected void setCloudletScheduler(CloudletScheduler cloudletScheduler) {
-		this.cloudletScheduler = cloudletScheduler;
-	}
+	public void setHost(HostEntity host) { this.host = host; }
 
-	/**
-	 * Checks if is in migration.
-	 * 
-	 * @return true, if is in migration
-	 */
-	public boolean isInMigration() {
-		return inMigration;
-	}
+	public List<? extends GuestEntity> getGuestList() { return guestList; }
+	public List<? extends GuestEntity> getGuestsMigratingIn() { return guestsMigratingIn; }
 
-	/**
-	 * Sets the in migration.
-	 * 
-	 * @param inMigration the new in migration
-	 */
-	public void setInMigration(boolean inMigration) {
-		this.inMigration = inMigration;
-	}
+	public boolean isInPause() { return inPause; }
+	public void setInPause(boolean inPause) { this.inPause = inPause; }
 
-	/**
-	 * Gets the current allocated size.
-	 * 
-	 * @return the current allocated size
-	 */
-	public long getCurrentAllocatedSize() {
-		return currentAllocatedSize;
-	}
+	public boolean isInMigration() { return inMigration; }
+	public void setInMigration(boolean inMigration) { this.inMigration = inMigration; }
 
-	/**
-	 * Sets the current allocated size.
-	 * 
-	 * @param currentAllocatedSize the new current allocated size
-	 */
-	protected void setCurrentAllocatedSize(long currentAllocatedSize) {
-		this.currentAllocatedSize = currentAllocatedSize;
-	}
+	public boolean isInWaiting() { return inWaiting; }
+	public void setInWaiting(boolean inWaiting) { this.inWaiting = inWaiting; }
 
-	/**
-	 * Gets the current allocated ram.
-	 * 
-	 * @return the current allocated ram
-	 */
-	public int getCurrentAllocatedRam() {
-		return currentAllocatedRam;
-	}
+	public long getCurrentAllocatedSize() { return currentAllocatedSize; }
+	public void setCurrentAllocatedSize(long currentAllocatedSize) { this.currentAllocatedSize = currentAllocatedSize; }
 
-	/**
-	 * Sets the current allocated ram.
-	 * 
-	 * @param currentAllocatedRam the new current allocated ram
-	 */
-	public void setCurrentAllocatedRam(int currentAllocatedRam) {
-		this.currentAllocatedRam = currentAllocatedRam;
-	}
+	public long getCurrentAllocatedBw() { return currentAllocatedBw; }
+	public void setCurrentAllocatedBw(long currentAllocatedBw) { this.currentAllocatedBw = currentAllocatedBw; }
 
-	/**
-	 * Gets the current allocated bw.
-	 * 
-	 * @return the current allocated bw
-	 */
-	public long getCurrentAllocatedBw() {
-		return currentAllocatedBw;
-	}
+	public int getCurrentAllocatedRam() { return currentAllocatedRam; }
+	public void setCurrentAllocatedRam(int currentAllocatedRam) { this.currentAllocatedRam = currentAllocatedRam; }
 
-	/**
-	 * Sets the current allocated bw.
-	 * 
-	 * @param currentAllocatedBw the new current allocated bw
-	 */
-	public void setCurrentAllocatedBw(long currentAllocatedBw) {
-		this.currentAllocatedBw = currentAllocatedBw;
-	}
-
-	/**
-	 * Gets the current allocated mips.
-	 * 
-	 * @return the current allocated mips
-	 * @TODO replace returning the field by a call to getCloudletScheduler().getCurrentMipsShare()
-	 */
-	public List<Double> getCurrentAllocatedMips() {
-		return currentAllocatedMips;
-	}
-
-	/**
-	 * Sets the current allocated mips.
-	 * 
-	 * @param currentAllocatedMips the new current allocated mips
-	 */
+	public List<Double> getCurrentAllocatedMips() { return currentAllocatedMips; }
 	public void setCurrentAllocatedMips(List<Double> currentAllocatedMips) {
 		this.currentAllocatedMips = currentAllocatedMips;
 	}
 
-	/**
-	 * Checks if is being instantiated.
-	 * 
-	 * @return true, if is being instantiated
-	 */
-	public boolean isBeingInstantiated() {
-		return beingInstantiated;
+	public boolean isBeingInstantiated() { return beingInstantiated; }
+	public void setBeingInstantiated(boolean beingInstantiated) { this.beingInstantiated = beingInstantiated; }
+
+	public RamProvisioner getGuestRamProvisioner() { return guestRamProvisioner; }
+	public void setGuestRamProvisioner(RamProvisioner guestRamProvisioner) {
+		this.guestRamProvisioner = guestRamProvisioner;
 	}
 
+	public BwProvisioner getGuestBwProvisioner() { return guestBwProvisioner; }
+	public void setGuestBwProvisioner(BwProvisioner guestBwProvisioner) { this.guestBwProvisioner = guestBwProvisioner; }
+
+	public List<? extends Pe> getPeList() { return peList; }
+	public void setPeList(List<? extends Pe> peList) { this.peList = peList; }
 	/**
-	 * Sets the being instantiated.
-	 * 
-	 * @param beingInstantiated the new being instantiated
+	 * @TODO: I'm not sure if this is alright, but I need it for compatibility reasons with default guestCreate()
 	 */
-	public void setBeingInstantiated(boolean beingInstantiated) {
-		this.beingInstantiated = beingInstantiated;
+	public long getStorage() {
+		return getSize();
+	}
+	public void setStorage(long storage) { setSize(storage); }
+
+	public Datacenter getDatacenter() {
+		return getHost().getDatacenter();
 	}
 
-	/**
-	 * Gets the state history.
-	 * 
-	 * @return the state history
-	 */
-	public List<VmStateHistoryEntry> getStateHistory() {
-		return stateHistory;
-	}
-
-	/**
-	 * Adds a VM state history entry.
-	 * 
-	 * @param time the time
-	 * @param allocatedMips the allocated mips
-	 * @param requestedMips the requested mips
-	 * @param isInMigration the is in migration
-	 */
-	public void addStateHistoryEntry(
-			double time,
-			double allocatedMips,
-			double requestedMips,
-			boolean isInMigration) {
-		VmStateHistoryEntry newState = new VmStateHistoryEntry(
-				time,
-				allocatedMips,
-				requestedMips,
-				isInMigration);
-		if (!getStateHistory().isEmpty()) {
-			VmStateHistoryEntry previousState = getStateHistory().get(getStateHistory().size() - 1);
-			if (previousState.getTime() == time) {
-				getStateHistory().set(getStateHistory().size() - 1, newState);
-				return;
-			}
+	public void setDatacenter(Datacenter datacenter) {
+		if (!isBeingInstantiated()) { // wait for the Vm to be bound to a host
+			getHost().setDatacenter(datacenter);
 		}
-		getStateHistory().add(newState);
 	}
 
+	/**
+	 * Sets the PEs of this machine to a FAILED status. NOTE: <tt>resName</tt> is used for debugging
+	 * purposes, which is <b>ON</b> by default. Use {@link #setFailed(boolean)} if you do not want
+	 * this information.
+	 *
+	 * @param resName the name of the resource
+	 * @param failed  the failed
+	 * @return <tt>true</tt> if successful, <tt>false</tt> otherwise
+	 */
+	public boolean setFailed(String resName, boolean failed) {
+		// all the PEs are failed (or recovered, depending on fail)
+		this.failed = failed;
+		PeList.setStatusFailed(getPeList(), resName, getId(), failed);
+		return true;
+	}
+
+	/**
+	 * Sets the PEs of this machine to a FAILED status.
+	 *
+	 * @param failed the failed
+	 * @return <tt>true</tt> if successful, <tt>false</tt> otherwise
+	 */
+	public boolean setFailed(boolean failed) {
+		// all the PEs are failed (or recovered, depending on fail)
+		this.failed = failed;
+		PeList.setStatusFailed(getPeList(), failed);
+		return true;
+	}
+
+	/**
+	 * Gets the total mips.
+	 *
+	 * @return the total mips
+	 */
+	public double getTotalMips() {
+		if (getPeList() != null) {
+			return PeList.getTotalMips(getPeList());
+		}
+
+		return getCurrentRequestedTotalMips();
+	}
+
+	/**
+	 * Gets the free pes number.
+	 *
+	 * @return the free pes number
+	 */
+	public int getNumberOfFreePes() {
+		if (getPeList() != null) {
+			return PeList.getNumberOfFreePes(getPeList());
+		}
+
+		return getNumberOfPes();
+	}
+
+	public boolean isFailed() {
+		return failed;
+	}
+
+	public HostEntity getHost() { return host; }
+
+	public List<VmStateHistoryEntry> getStateHistory() { return stateHistory; }
+
+	/**
+	 * DEPRECATED: USE GuestEntity.getUid(userId, vmId) instead!
+	 */
+	@Deprecated
+	public static String getUid(int userId, int vmId) {
+		return userId + "-" + vmId;
+	}
 }

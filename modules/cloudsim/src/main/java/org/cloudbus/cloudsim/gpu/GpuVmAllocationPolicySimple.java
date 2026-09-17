@@ -25,7 +25,7 @@ public class GpuVmAllocationPolicySimple extends GpuVmAllocationPolicy {
 	public boolean allocateHostForVm(Vm vm) {
 		if (!getVmTable().containsKey(vm.getUid())) {
 			GpuVm gpuVm = (GpuVm) vm;
-			for (Host host : getHostList()) {
+			for (Host host : this.<Host>getHostList()) {
 				boolean result = allocateHostForVm(vm, host);
 				if (!result) {
 					continue;

@@ -8,20 +8,19 @@
 
 package org.cloudbus.cloudsim;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.text.DecimalFormatSymbols;
 import java.util.Locale;
 
-import org.junit.Before;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * @author		Anton Beloglazov
+ * @author 		Remo Andreoli
  * @since		CloudSim Toolkit 2.0
  */
 public class LogTest {
@@ -31,7 +30,7 @@ public class LogTest {
         private static final DecimalFormatSymbols dfs = 
             DecimalFormatSymbols.getInstance(Locale.getDefault(Locale.Category.FORMAT));
 
-	@Before
+	@BeforeEach
 	public void setUp() throws Exception {
 		Log.setOutput(OUTPUT);
 	}
@@ -56,20 +55,20 @@ public class LogTest {
 	}
 
 	@Test
-	public void testPrintLine() throws IOException {
-		Log.printLine("test test");
+	public void testPrintLn() throws IOException {
+		Log.println("test test");
 		assertEquals("test test" + LINE_SEPARATOR, OUTPUT.toString());
 		OUTPUT.reset();
 
-		Log.printLine(123);
+		Log.println(123);
 		assertEquals("123" + LINE_SEPARATOR, OUTPUT.toString());
 		OUTPUT.reset();
 
-		Log.printLine(123L);
+		Log.println(123L);
 		assertEquals("123" + LINE_SEPARATOR, OUTPUT.toString());
 		OUTPUT.reset();
 
-		Log.printLine(123.0);
+		Log.println(123.0);
 		assertEquals("123.0" + LINE_SEPARATOR, OUTPUT.toString());
 		OUTPUT.reset();
 	}
@@ -122,7 +121,7 @@ public class LogTest {
 		assertEquals("test test", OUTPUT.toString());
 		OUTPUT.reset();
 
-		Log.printLine("test test");
+		Log.println("test test");
 		assertEquals("test test" + LINE_SEPARATOR, OUTPUT.toString());
 		OUTPUT.reset();
 
@@ -142,7 +141,7 @@ public class LogTest {
 		assertEquals("", OUTPUT.toString());
 		OUTPUT.reset();
 
-		Log.printLine("test test");
+		Log.println("test test");
 		assertEquals("", OUTPUT.toString());
 		OUTPUT.reset();
 
@@ -162,7 +161,7 @@ public class LogTest {
 		assertEquals("test test", OUTPUT.toString());
 		OUTPUT.reset();
 
-		Log.printLine("test test");
+		Log.println("test test");
 		assertEquals("test test" + LINE_SEPARATOR, OUTPUT.toString());
 		OUTPUT.reset();
 

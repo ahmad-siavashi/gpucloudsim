@@ -33,7 +33,7 @@ public class UtilizationModelPlanetLabInMemory implements UtilizationModel {
 		BufferedReader input = new BufferedReader(new FileReader(inputPath));
 		int n = data.length;
 		for (int i = 0; i < n - 1; i++) {
-			data[i] = Integer.valueOf(input.readLine()) / 100.0;
+			data[i] = Integer.parseInt(input.readLine()) / 100.0;
 		}
 		data[n - 1] = data[n - 2];
 		input.close();
@@ -56,7 +56,7 @@ public class UtilizationModelPlanetLabInMemory implements UtilizationModel {
 		BufferedReader input = new BufferedReader(new FileReader(inputPath));
 		int n = data.length;
 		for (int i = 0; i < n - 1; i++) {
-			data[i] = Integer.valueOf(input.readLine()) / 100.0;
+			data[i] = Integer.parseInt(input.readLine()) / 100.0;
 		}
 		data[n - 1] = data[n - 2];
 		input.close();
@@ -72,8 +72,7 @@ public class UtilizationModelPlanetLabInMemory implements UtilizationModel {
 		double utilization1 = data[time1];
 		double utilization2 = data[time2];
 		double delta = (utilization2 - utilization1) / ((time2 - time1) * getSchedulingInterval());
-		double utilization = utilization1 + delta * (time - time1 * getSchedulingInterval());
-		return utilization;
+        return utilization1 + delta * (time - time1 * getSchedulingInterval());
 
 	}
 

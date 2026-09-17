@@ -7,20 +7,17 @@
 
 package org.cloudbus.cloudsim;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import static org.easymock.EasyMock.createMock;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.replay;
 import static org.easymock.EasyMock.verify;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import org.junit.Before;
-import org.junit.Test;
 
 /**
  * @author Anton Beloglazov
@@ -34,7 +31,7 @@ public class VmTest {
 
 	private static final double MIPS = 1000;
 
-	private static final int PES_NUMBER = 2;
+	private static final int PES_NUMBER = 4;
 
 	private static final int RAM = 1024;
 
@@ -48,7 +45,7 @@ public class VmTest {
 
 	private Vm vm;
 
-	@Before
+	@BeforeEach
 	public void setUp() throws Exception {
 		vmScheduler = new CloudletSchedulerDynamicWorkload(MIPS, PES_NUMBER);
 		vm = new Vm(ID, USER_ID, MIPS, PES_NUMBER, RAM, BW, SIZE, VMM, vmScheduler);
@@ -92,8 +89,8 @@ public class VmTest {
 
 	@Test
 	public void testGetHost() {
-		assertEquals(null, vm.getHost());
-		Host host = new Host(0, null, null, 0, new ArrayList<Pe>(), null);
+		assertNull(vm.getHost());
+		Host host = new Host(0, null, null, 0, new ArrayList<>(), null);
 		vm.setHost(host);
 		assertEquals(host, vm.getHost());
 	}
@@ -122,12 +119,12 @@ public class VmTest {
 
 	@Test
 	public void testUpdateVmProcessing() {
-		assertEquals(0, vm.updateVmProcessing(0, null), 0);
-		ArrayList<Double> mipsShare1 = new ArrayList<Double>();
+		assertEquals(0, vm.updateCloudletsProcessing(0, null), 0);
+		ArrayList<Double> mipsShare1 = new ArrayList<>();
 		mipsShare1.add(1.0);
-		ArrayList<Double> mipsShare2 = new ArrayList<Double>();
+		ArrayList<Double> mipsShare2 = new ArrayList<>();
 		mipsShare2.add(1.0);
-		assertEquals(vmScheduler.updateVmProcessing(0, mipsShare1), vm.updateVmProcessing(0, mipsShare2), 0);
+		assertEquals(vmScheduler.updateCloudletsProcessing(0, mipsShare1), vm.updateCloudletsProcessing(0, mipsShare2), 0);
 	}
 
 	@Test
@@ -167,13 +164,27 @@ public class VmTest {
 
 	@Test
 	public void testGetCurrentRequestedMips() {
+		List<Double> expectedCurrentMips = new ArrayList<>(PES_NUMBER);
+		for (int i = 0; i < PES_NUMBER; i++)
+			expectedCurrentMips.add(MIPS);
+
+		assertEquals(expectedCurrentMips, vm.getCurrentRequestedMips());
+	}
+
+	@Test
+	public void testGetCurrentRequestedTotalMips() {
+		assertEquals(MIPS * PES_NUMBER, vm.getCurrentRequestedTotalMips(), 0);
+	}
+
+	@Test
+	public void testGetCurrentRequestedMipsNotBeingInstantiated() {
 		CloudletScheduler cloudletScheduler = createMock(CloudletScheduler.class);
 		Vm vm = new Vm(ID, USER_ID, MIPS, PES_NUMBER, RAM, BW, SIZE, VMM, cloudletScheduler);
 		vm.setBeingInstantiated(false);
 
-		List<Double> expectedCurrentMips = new ArrayList<Double>();
-		expectedCurrentMips.add(MIPS / 2);
-		expectedCurrentMips.add(MIPS / 2);
+		List<Double> expectedCurrentMips = new ArrayList<>();
+		for (int i = 0; i < PES_NUMBER; i++)
+			expectedCurrentMips.add(MIPS);
 
 		expect(cloudletScheduler.getCurrentRequestedMips()).andReturn(expectedCurrentMips);
 
@@ -185,19 +196,16 @@ public class VmTest {
 	}
 
 	@Test
-	public void testGetCurrentRequestedTotalMips() {
+	public void testGetCurrentRequestedTotalMipsNotBeingInstantiated() {
 		CloudletScheduler cloudletScheduler = createMock(CloudletScheduler.class);
 		Vm vm = new Vm(ID, USER_ID, MIPS, PES_NUMBER, RAM, BW, SIZE, VMM, cloudletScheduler);
+		vm.setBeingInstantiated(false);
 
-		ArrayList<Double> currentMips = new ArrayList<Double>();
-		currentMips.add(MIPS);
-		currentMips.add(MIPS);
-
-		expect(cloudletScheduler.getCurrentRequestedMips()).andReturn(currentMips);
+		expect(cloudletScheduler.getCurrentRequestedTotalMips()).andReturn(MIPS * PES_NUMBER);
 
 		replay(cloudletScheduler);
 
-		assertEquals(MIPS * 2, vm.getCurrentRequestedTotalMips(), 0);
+		assertEquals(MIPS * PES_NUMBER, vm.getCurrentRequestedTotalMips(), 0);
 
 		verify(cloudletScheduler);
 	}

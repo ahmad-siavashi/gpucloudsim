@@ -25,9 +25,9 @@ public class File {
         /**
          * A file attribute.
          */
-	private FileAttribute attribute;    
+	private FileAttribute attribute;
 
-	/** A transaction time for adding, deleting or getting the file. 
+	/** A transaction time for adding, deleting or getting the file.
          * @see #setTransactionTime(double) 
          */
 	private double transactionTime;
@@ -60,7 +60,7 @@ public class File {
 	 *             </ul>
 	 */
 	public File(String fileName, int fileSize) throws ParameterException {
-		if (fileName == null || fileName.length() == 0) {
+		if (fileName == null || fileName.isEmpty()) {
 			throw new ParameterException("File(): Error - invalid file name.");
 		}
 
@@ -90,6 +90,8 @@ public class File {
 		attribute.copyValue(fileAttr);
 		fileAttr.setMasterCopy(false);   // set this file to replica
 	}
+
+	public double getTransactionTime() { return transactionTime; }
 
 	/**
 	 * Clone the current file and set the cloned one as a <b>replica</b>.
@@ -411,15 +413,6 @@ public class File {
 
 		transactionTime = time;
 		return true;
-	}
-
-	/**
-	 * Gets the last transaction time of the file (in second).
-	 * 
-	 * @return the transaction time (in second)
-	 */
-	public double getTransactionTime() {
-		return transactionTime;
 	}
 
 }

@@ -14,6 +14,8 @@
 
 package org.cloudbus.cloudsim;
 
+import org.cloudbus.cloudsim.core.CloudSimTags;
+
 /**
  * Defines the structure for a network packet.
  * 
@@ -86,7 +88,7 @@ public interface Packet {
 	 * @pre $none
 	 * @post $none
          * 
-         * @todo Is it the Type of Service (ToS) of IPv4, like in
+         * //@TODO Is it the Type of Service (ToS) of IPv4, like in
          * the {@link Cloudlet#netToS}? If yes, so the names would
          * be standardized.
 	 */
@@ -123,12 +125,12 @@ public interface Packet {
 	void setLast(int last);
 
 	/**
-	 * Gets this packet tag
-	 * 
-	 * @return this packet tag
-	 * @pre $none
-	 * @post $none
-	 */
-	int getTag();
+     * Gets this packet tag
+     *
+     * @return this packet tag
+     * @pre $none
+     * @post $none
+     */
+	CloudSimTags getTag();
 
 }

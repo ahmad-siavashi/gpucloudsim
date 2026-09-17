@@ -147,6 +147,13 @@ public class GpuCloudlet extends Cloudlet {
 	}
 
 	/**
+	 * @return true if the GpuCloudlet has a device portion
+	 */
+	public boolean hasGpuTask() {
+		return getGpuTask() != null;
+	}
+
+	/**
 	 * @param gpuTask the device portion
 	 */
 	protected void setGpuTask(GpuTask gpuTask) {

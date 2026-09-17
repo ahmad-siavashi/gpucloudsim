@@ -8,21 +8,18 @@ import java.util.Map;
 import org.cloudbus.cloudsim.Host;
 import org.cloudbus.cloudsim.Vm;
 import org.cloudbus.cloudsim.VmAllocationPolicy;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.core.HostEntity;
 
 /**
  * {@link GpuVmAllocationPolicy} extends {@link VmAllocationPolicy} to support
- * GPU-enabled VM placement.
- * 
+ * GPU-enabled VM placement. Subclasses place a {@link GpuVm} and its
+ * {@link Vgpu} together by implementing {@link #allocateHostForVm(Vm)}.
+ *
  * @author Ahmad Siavashi
  *
  */
 public abstract class GpuVmAllocationPolicy extends VmAllocationPolicy {
-
-	/**
-	 * The map between each VM and its allocated host. The map key is a VM UID and
-	 * the value is the allocated host for that VM.
-	 */
-	private Map<String, Host> vmTable;
 
 	/**
 	 * GPU-equipped hosts
@@ -39,19 +36,40 @@ public abstract class GpuVmAllocationPolicy extends VmAllocationPolicy {
 	 */
 	public GpuVmAllocationPolicy(List<? extends Host> list) {
 		super(list);
-		setVmTable(new HashMap<String, Host>());
 		setGpuHostList(getHostList());
 		setVgpuHosts(new HashMap<Vgpu, GpuHost>());
 	}
 
+	/**
+	 * Allocates a host (and a GPU, if the VM has a vGPU) for the given VM.
+	 *
+	 * @param vm the VM to allocate
+	 * @return true if the VM was allocated
+	 */
 	@Override
-	public List<Map<String, Object>> optimizeAllocation(List<? extends Vm> vmList) {
-		return null;
+	public abstract boolean allocateHostForVm(Vm vm);
+
+	@Override
+	public boolean allocateHostForGuest(GuestEntity guest) {
+		return allocateHostForVm((Vm) guest);
+	}
+
+	/**
+	 * GPU-aware policies select the host and the GPU at the same time in
+	 * {@link #allocateHostForVm(Vm)}, so a host cannot be looked up on its own.
+	 */
+	@Override
+	public HostEntity findHostForGuest(GuestEntity guest) {
+		throw new UnsupportedOperationException(
+				getClass().getSimpleName() + " selects hosts in allocateHostForVm(Vm); use allocateHostForGuest instead.");
 	}
 
 	@Override
-	public void deallocateHostForVm(Vm vm) {
-		getVmTable().remove(vm.getUid()).vmDestroy(vm);
+	public boolean allocateHostForGuest(GuestEntity guest, HostEntity host) {
+		if (getVmTable().containsKey(guest.getUid())) {
+			return false;
+		}
+		return super.allocateHostForGuest(guest, host);
 	}
 
 	protected void deallocateGpuForVgpu(Vgpu vgpu) {
@@ -91,21 +109,9 @@ public abstract class GpuVmAllocationPolicy extends VmAllocationPolicy {
 		return false;
 	}
 
-	@Override
-	public boolean allocateHostForVm(Vm vm, Host host) {
-		if (!getVmTable().containsKey(vm.getUid())) {
-			boolean result = host.vmCreate(vm);
-			if (result) {
-				getVmTable().put(vm.getUid(), host);
-				return true;
-			}
-		}
-		return false;
-	}
-
 	/**
 	 * Allocates Hosts for a set of {@link GpuVm}s.
-	 * 
+	 *
 	 * @param set of VMs
 	 * @return a list of vm-result pairs
 	 */
@@ -118,28 +124,11 @@ public abstract class GpuVmAllocationPolicy extends VmAllocationPolicy {
 		return results;
 	}
 
-	@Override
-	public Host getHost(Vm vm) {
-		return getVmTable().get(vm.getUid());
-	}
-
-	@Override
-	public Host getHost(int vmId, int userId) {
-		return getVmTable().get(Vm.getUid(userId, vmId));
-	}
-
 	/**
-	 * @return the vmTable
+	 * @return the map between each VM UID and its allocated host
 	 */
-	protected Map<String, Host> getVmTable() {
-		return vmTable;
-	}
-
-	/**
-	 * @param vmTable the vmTable to set
-	 */
-	protected void setVmTable(Map<String, Host> vmTable) {
-		this.vmTable = vmTable;
+	protected Map<String, HostEntity> getVmTable() {
+		return getGuestTable();
 	}
 
 	protected List<GpuHost> getGpuHostList() {

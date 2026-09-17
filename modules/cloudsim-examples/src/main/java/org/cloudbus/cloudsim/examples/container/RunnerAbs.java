@@ -1,33 +1,28 @@
 package org.cloudbus.cloudsim.examples.container;
 
-import org.cloudbus.cloudsim.Log;
-import org.cloudbus.cloudsim.container.containerPlacementPolicies.*;
-import org.cloudbus.cloudsim.container.containerSelectionPolicies.PowerContainerSelectionPolicy;
-import org.cloudbus.cloudsim.container.containerSelectionPolicies.PowerContainerSelectionPolicyCor;
-import org.cloudbus.cloudsim.container.containerSelectionPolicies.PowerContainerSelectionPolicyMaximumUsage;
+import org.cloudbus.cloudsim.*;
 import org.cloudbus.cloudsim.container.core.*;
-import org.cloudbus.cloudsim.container.hostSelectionPolicies.*;
 import org.cloudbus.cloudsim.container.resourceAllocatorMigrationEnabled.PowerContainerVmAllocationPolicyMigrationAbstractHostSelection;
 import org.cloudbus.cloudsim.container.resourceAllocatorMigrationEnabled.PowerContainerVmAllocationPolicyMigrationStaticThresholdMC;
 import org.cloudbus.cloudsim.container.resourceAllocatorMigrationEnabled.PowerContainerVmAllocationPolicyMigrationStaticThresholdMCUnderUtilized;
-import org.cloudbus.cloudsim.container.resourceAllocators.ContainerAllocationPolicy;
-import org.cloudbus.cloudsim.container.resourceAllocators.ContainerAllocationPolicyRS;
-import org.cloudbus.cloudsim.container.resourceAllocators.ContainerVmAllocationPolicy;
-import org.cloudbus.cloudsim.container.resourceAllocators.PowerContainerAllocationPolicySimple;
-import org.cloudbus.cloudsim.container.vmSelectionPolicies.PowerContainerVmSelectionPolicy;
-import org.cloudbus.cloudsim.container.vmSelectionPolicies.PowerContainerVmSelectionPolicyMaximumCorrelation;
-import org.cloudbus.cloudsim.container.vmSelectionPolicies.PowerContainerVmSelectionPolicyMaximumUsage;
-import org.cloudbus.cloudsim.core.CloudSim;
+import org.cloudbus.cloudsim.VmAllocationWithSelectionPolicy;
+import org.cloudbus.cloudsim.core.*;
+import org.cloudbus.cloudsim.selectionPolicies.PowerSelectionPolicyMaximumCorrelation;
+import org.cloudbus.cloudsim.selectionPolicies.PowerSelectionPolicyMaximumCorrelation2;
+import org.cloudbus.cloudsim.selectionPolicies.SelectionPolicyMaximumUsage;
+import org.cloudbus.cloudsim.selectionPolicies.*;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * The RunnerAbs Class is the modified version of {@link org.cloudbus.cloudsim.examples.power.RunnerAbstract}
  * Created by sareh on 18/08/15.
+ * Modified by Remo Andreoli (Feb 2024)
  */
 public abstract class RunnerAbs {
     private static boolean enableOutput;
@@ -45,12 +40,12 @@ public abstract class RunnerAbs {
     /**
      * The host list.
      */
-    protected static List<ContainerHost> hostList;
+    protected static List<HostEntity> hostList;
 
     /**
      * The Cloudlet List
      */
-    protected static List<ContainerCloudlet> cloudletList;
+    protected static List<Cloudlet> cloudletList;
     /**
      * The overBooking Factor for containers
      */
@@ -150,7 +145,7 @@ public abstract class RunnerAbs {
                 folder5.mkdir();
             }
 
-            File file = new File(outputFolder + "/log/" + getExperimentName().substring(0, index) + "/" + this.getExperimentName(new String[]{hostSelectionPolicy, vmAllocationPolicy, vmSelectionPolicy, containerSelectionPolicy, String.valueOf(getOverBookingFactor()), getRunTime()}) + ".txt");
+            File file = new File(outputFolder + "/log/" + getExperimentName().substring(0, index) + "/" + this.getExperimentName(hostSelectionPolicy, vmAllocationPolicy, vmSelectionPolicy, containerSelectionPolicy, String.valueOf(getOverBookingFactor()), getRunTime()) + ".txt");
             file.createNewFile();
             Log.setOutput(new FileOutputStream(file));
         }
@@ -167,7 +162,7 @@ public abstract class RunnerAbs {
 
     protected abstract void init(String var1, double overBookingFactor);
 
-    protected void start(String experimentName, String outputFolder, ContainerVmAllocationPolicy vmAllocationPolicy, ContainerAllocationPolicy containerAllocationPolicy) {
+    protected void start(String experimentName, String outputFolder, VmAllocationPolicy vmAllocationPolicy, VmAllocationPolicy containerAllocationPolicy) {
         System.out.println("Starting " + experimentName);
 
         try {
@@ -177,26 +172,26 @@ public abstract class RunnerAbs {
                     ConstantsExamples.VM_STARTTUP_DELAY, ConstantsExamples.CONTAINER_STARTTUP_DELAY);
 //            PowerContainerDatacenter e = (PowerContainerDatacenter) HelperEx.createDatacenter("Datacenter", PowerContainerDatacenter.class, hostList, vmAllocationPolicy, containerAllocationPolicy);
             vmAllocationPolicy.setDatacenter(e);
+
             e.setDisableVmMigrations(false);
-            broker.submitVmList(vmList);
+            broker.submitGuestList(vmList);
             broker.submitContainerList(containerList);
             broker.submitCloudletList(cloudletList.subList(0, containerList.size()));
-            ;
             CloudSim.terminateSimulation(86400.0D);
             double lastClock = CloudSim.startSimulation();
-            List newList = broker.getCloudletReceivedList();
-            Log.printLine("Received " + newList.size() + " cloudlets");
+            List<Cloudlet> newList = broker.getCloudletReceivedList();
+            Log.println("Received " + newList.size() + " cloudlets");
             CloudSim.stopSimulation();
 
 //            HelperEx.printResults(e, broker.getVmsCreatedList(),broker.getContainersCreatedList() ,lastClock, experimentName, true, outputFolder);
             HelperEx.printResultsNew(e, broker, lastClock, experimentName, true, outputFolder);
         } catch (Exception var8) {
             var8.printStackTrace();
-            Log.printLine("The simulation has been terminated due to an unexpected error");
+            Log.println("The simulation has been terminated due to an unexpected error");
             System.exit(0);
         }
 
-        Log.printLine("Finished " + experimentName);
+        Log.println("Finished " + experimentName);
     }
 
     protected String getExperimentName(String... args) {
@@ -216,11 +211,11 @@ public abstract class RunnerAbs {
     }
 
 
-    protected ContainerVmAllocationPolicy getVmAllocationPolicy(String vmAllocationPolicyName, String vmSelectionPolicyName, String containerSelectionPolicyName, String hostSelectionPolicyName) {
-        Object vmAllocationPolicy = null;
-        PowerContainerVmSelectionPolicy vmSelectionPolicy = null;
-        PowerContainerSelectionPolicy containerSelectionPolicy = null;
-        HostSelectionPolicy hostSelectionPolicy = null;
+    protected VmAllocationPolicy getVmAllocationPolicy(String vmAllocationPolicyName, String vmSelectionPolicyName, String containerSelectionPolicyName, String hostSelectionPolicyName) {
+        VmAllocationPolicy vmAllocationPolicy = null;
+        SelectionPolicy<GuestEntity> vmSelectionPolicy = null;
+        SelectionPolicy<PowerGuestEntity> containerSelectionPolicy = null;
+        SelectionPolicy<HostEntity> hostSelectionPolicy = null;
         if (!vmSelectionPolicyName.isEmpty() && !containerSelectionPolicyName.isEmpty() && !hostSelectionPolicyName.isEmpty()) {
             vmSelectionPolicy = this.getVmSelectionPolicy(vmSelectionPolicyName);
             containerSelectionPolicy = this.getContainerSelectionPolicy(containerSelectionPolicyName);
@@ -254,143 +249,123 @@ public abstract class RunnerAbs {
             System.exit(0);
         }
 
-        return (ContainerVmAllocationPolicy) vmAllocationPolicy;
+        return vmAllocationPolicy;
     }
 
-    protected ContainerAllocationPolicy getContainerAllocationPolicy(String containerAllocationPolicyName) {
-        ContainerAllocationPolicy containerAllocationPolicy;
-        if (containerAllocationPolicyName == "Simple") {
-
-            containerAllocationPolicy = new PowerContainerAllocationPolicySimple(); // DVFS policy without VM migrations
+    protected VmAllocationPolicy getContainerAllocationPolicy(String containerAllocationPolicyName) {
+        VmAllocationPolicy containerAllocationPolicy;
+        if (Objects.equals(containerAllocationPolicyName, "Simple")) {
+            containerAllocationPolicy = new VmAllocationPolicySimple(vmList); // DVFS policy without VM migrations
         } else {
-
-            ContainerPlacementPolicy placementPolicy = getContainerPlacementPolicy(containerAllocationPolicyName);
-            containerAllocationPolicy = new ContainerAllocationPolicyRS(placementPolicy); // DVFS policy without VM migrations
+            SelectionPolicy<HostEntity> selectionPolicy = getContainerPlacementPolicy(containerAllocationPolicyName);
+            containerAllocationPolicy = new VmAllocationWithSelectionPolicy(vmList, selectionPolicy); // DVFS policy without VM migrations
         }
 
         return containerAllocationPolicy;
 
     }
 
-    protected ContainerPlacementPolicy getContainerPlacementPolicy(String name) {
-        ContainerPlacementPolicy placementPolicy;
+    protected SelectionPolicy<HostEntity> getContainerPlacementPolicy(String name) {
+        SelectionPolicy<HostEntity> selectionPolicy;
         switch (name) {
             case "LeastFull":
-                placementPolicy = new ContainerPlacementPolicyLeastFull();
+                selectionPolicy = new SelectionPolicyLeastFull<>();
                 break;
             case "MostFull":
-                placementPolicy = new ContainerPlacementPolicyMostFull();
+                selectionPolicy = new SelectionPolicyMostFull<>();
                 break;
 
             case "FirstFit":
-                placementPolicy = new ContainerPlacementPolicyFirstFit();
+                selectionPolicy = new SelectionPolicyFirstFit<>();
                 break;
             case "Random":
-                placementPolicy = new ContainerPlacementPolicyRandomSelection();
+                selectionPolicy = new SelectionPolicyRandomSelection<>();
                 break;
             default:
-                placementPolicy = null;
+                selectionPolicy = null;
                 System.out.println("The container placement policy is not defined");
                 break;
         }
-        return placementPolicy;
+        return selectionPolicy;
     }
 
-    protected HostSelectionPolicy getHostSelectionPolicy(String hostSelectionPolicyName) {
-        Object hostSelectionPolicy = null;
-        if (hostSelectionPolicyName == "FirstFit") {
-
-            hostSelectionPolicy = new HostSelectionPolicyFirstFit();
-
-
-        } else if (hostSelectionPolicyName == "LeastFull") {
-
-            hostSelectionPolicy = new HostSelectionPolicyLeastFull();
-
-
-        } else if (hostSelectionPolicyName == "MostFull") {
-
-            hostSelectionPolicy = new HostSelectionPolicyMostFull();
-
-
+    protected SelectionPolicy<HostEntity> getHostSelectionPolicy(String hostSelectionPolicyName) {
+        SelectionPolicy<HostEntity> hostSelectionPolicy = null;
+        if (Objects.equals(hostSelectionPolicyName, "FirstFit")) {
+            hostSelectionPolicy = new SelectionPolicyFirstFit<>();
+        } else if (Objects.equals(hostSelectionPolicyName, "LeastFull")) {
+            hostSelectionPolicy = new SelectionPolicyLeastFull<>();
+        } else if (Objects.equals(hostSelectionPolicyName, "MostFull")) {
+            hostSelectionPolicy = new SelectionPolicyMostFull<>();
         }
 //        else if (hostSelectionPolicyName == "MinCor") {
-
-//            hostSelectionPolicy = new HostSelectionPolicyMinimumCorrelation();
-
-
+    //            hostSelectionPolicy = new PowerSelectionPolicyMinimumCorrelation();
 //        }
-    else if (hostSelectionPolicyName == "RandomSelection") {
-
-            hostSelectionPolicy = new HostSelectionPolicyRandomSelection();
-
-
+    else if (Objects.equals(hostSelectionPolicyName, "RandomSelection")) {
+            hostSelectionPolicy = new SelectionPolicyRandomSelection<>();
         }
 // else if(vmSelectionPolicyName.equals("mmt")) {
-//            vmSelectionPolicy = new PowerVmSelectionPolicyMinimumMigrationTime();
+//            vmSelectionPolicy = new SelectionPolicyMinimumMigrationTime();
 //        } else if(vmSelectionPolicyName.equals("mu")) {
-//            vmSelectionPolicy = new PowerVmSelectionPolicyMinimumUtilization();
+//            vmSelectionPolicy = new SelectionPolicyMinimumUtilization();
 //        } else if(vmSelectionPolicyName.equals("rs")) {
-//            vmSelectionPolicy = new PowerVmSelectionPolicyRandomSelection();
+//            vmSelectionPolicy = new SelectionPolicyRandomSelection<>();
 //        }
         else {
             System.out.println("Unknown Host selection policy: " + hostSelectionPolicyName);
             System.exit(0);
         }
-
-        return (HostSelectionPolicy) hostSelectionPolicy;
+        return hostSelectionPolicy;
     }
 
-
-    protected PowerContainerSelectionPolicy getContainerSelectionPolicy(String containerSelectionPolicyName) {
-        Object containerSelectionPolicy = null;
+    
+    protected SelectionPolicy<PowerGuestEntity> getContainerSelectionPolicy(String containerSelectionPolicyName) {
+        SelectionPolicy<PowerGuestEntity> containerSelectionPolicy = null;
         if (containerSelectionPolicyName.equals("Cor")) {
-            containerSelectionPolicy = new PowerContainerSelectionPolicyCor(new PowerContainerSelectionPolicyMaximumUsage());
+            containerSelectionPolicy = new PowerSelectionPolicyMaximumCorrelation2(new SelectionPolicyMaximumUsage<>());
         } else if (containerSelectionPolicyName.equals("MaxUsage")) {
-            containerSelectionPolicy = new PowerContainerSelectionPolicyMaximumUsage();
-
-
+            containerSelectionPolicy = new SelectionPolicyMaximumUsage<>();
         }
 // else if(vmSelectionPolicyName.equals("mmt")) {
-//            vmSelectionPolicy = new PowerVmSelectionPolicyMinimumMigrationTime();
+//            vmSelectionPolicy = new SelectionPolicyMinimumMigrationTime();
 //        } else if(vmSelectionPolicyName.equals("mu")) {
-//            vmSelectionPolicy = new PowerVmSelectionPolicyMinimumUtilization();
+//            vmSelectionPolicy = new SelectionPolicyMinimumUtilization();
 //        } else if(vmSelectionPolicyName.equals("rs")) {
-//            vmSelectionPolicy = new PowerVmSelectionPolicyRandomSelection();
+//            vmSelectionPolicy = new SelectionPolicyRandomSelection<>();
 //        }
         else {
             System.out.println("Unknown Container selection policy: " + containerSelectionPolicyName);
             System.exit(0);
         }
 
-        return (PowerContainerSelectionPolicy) containerSelectionPolicy;
+        return containerSelectionPolicy;
     }
 
-
-    protected PowerContainerVmSelectionPolicy getVmSelectionPolicy(String vmSelectionPolicyName) {
-        Object vmSelectionPolicy = null;
+    // @TODO: is this use of generics correct?
+    protected <T extends GuestEntity> SelectionPolicy<T> getVmSelectionPolicy(String vmSelectionPolicyName) {
+        SelectionPolicy<T> vmSelectionPolicy = null;
         if (vmSelectionPolicyName.equals("VmMaxC")) {
-            vmSelectionPolicy = new PowerContainerVmSelectionPolicyMaximumCorrelation(new PowerContainerVmSelectionPolicyMaximumUsage());
+            vmSelectionPolicy = (SelectionPolicy<T>) new PowerSelectionPolicyMaximumCorrelation(new SelectionPolicyMaximumUsage());
         } else if (vmSelectionPolicyName.equals("VmMaxU")) {
-            vmSelectionPolicy = new PowerContainerVmSelectionPolicyMaximumUsage();
+            vmSelectionPolicy = new SelectionPolicyMaximumUsage<>();
         }
 // else if(vmSelectionPolicyName.equals("mmt")) {
-//            vmSelectionPolicy = new PowerVmSelectionPolicyMinimumMigrationTime();
+//            vmSelectionPolicy = new SelectionPolicyMinimumMigrationTime();
 //        } else if(vmSelectionPolicyName.equals("mu")) {
-//            vmSelectionPolicy = new PowerVmSelectionPolicyMinimumUtilization();
+//            vmSelectionPolicy = new SelectionPolicyMinimumUtilization();
 //        } else if(vmSelectionPolicyName.equals("rs")) {
-//            vmSelectionPolicy = new PowerVmSelectionPolicyRandomSelection();
+//            vmSelectionPolicy = new SelectionPolicyRandomSelection<>();
 //        }
         else {
             System.out.println("Unknown VM selection policy: " + vmSelectionPolicyName);
             System.exit(0);
         }
 
-        return (PowerContainerVmSelectionPolicy) vmSelectionPolicy;
+        return vmSelectionPolicy;
     }
 
     public void setEnableOutput(boolean enableOutput) {
-        this.enableOutput = enableOutput;
+        RunnerAbs.enableOutput = enableOutput;
     }
 
     public boolean isEnableOutput() {
@@ -404,6 +379,4 @@ public abstract class RunnerAbs {
     public void setOverBookingFactor(double overBookingFactor) {
         this.overBookingFactor = overBookingFactor;
     }
-
-
 }

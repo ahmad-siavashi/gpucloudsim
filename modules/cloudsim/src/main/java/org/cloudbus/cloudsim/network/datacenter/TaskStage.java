@@ -3,16 +3,14 @@
  * Description:  CloudSim (Cloud Simulation) Toolkit for Modeling and Simulation of Clouds
  * Licence:      GPL - http://www.gnu.org/copyleft/gpl.html
  *
- * Copyright (c) 2009-2012, The University of Melbourne, Australia
+ * Copyright (c) 2009-2024, The University of Melbourne, Australia
  */
 
 package org.cloudbus.cloudsim.network.datacenter;
 
 /**
  * TaskStage represents various stages a {@link NetworkCloudlet} can have during execution. 
- * Four stage types which are possible: {@link NetworkConstants#EXECUTION}, 
- * {@link NetworkConstants#WAIT_SEND}, {@link NetworkConstants#WAIT_RECV}, 
- * {@link NetworkConstants#FINISH}.
+ * Four stage types which are possible: EXECUTION, WAIT_SEND, WAIT_RECV,and FINISH.
  * 
  * <br/>Please refer to following publication for more details:<br/>
  * <ul>
@@ -22,44 +20,65 @@ package org.cloudbus.cloudsim.network.datacenter;
  * </ul>
  * 
  * @author Saurabh Kumar Garg
+ * @author Remo Andreoli
  * @since CloudSim Toolkit 1.0
- * @todo Attributes should be defined as private.
  */
 public class TaskStage {
-	int vpeer;
+	public enum TaskStageStatus {
+		EXECUTION,
+		WAIT_SEND,
+		WAIT_RECV,
+		FINISH;
+	}
 
-        /**
-         * The task type, either {@link NetworkConstants#EXECUTION}, 
-         * {@link NetworkConstants#WAIT_SEND} or {@link NetworkConstants#WAIT_RECV}.
-         * @todo It would be used enum instead of int constants.
-         */
-	int type;
+	/**
+	 * The task type
+	 */
+	private TaskStageStatus type;
 
-        /**
-         * The data length generated for the task (in bytes).
-        */
-	double data;
+	/**
+	 * The length of the task based on the type of operation performed.
+	 * It may be:
+	 * -) the execution length, in MI (type == EXECUTION)
+	 * -) the amount of data to be sent, in bytes (type == WAIT_RECV)
+	*/
+	private long taskLength;
 
-        /** Execution time for this stage. */
-	double time;
+	/** Execution time for this stage.
+	 * @NOTE: this variable is modified at run-time
+	 */
+	private double time;
 
-        /** Stage (task) id. */
-	double stageid;
+	/** Stage (task) id. */
+	private final double stageId;
 
-        /** Memory used by the task. */
-	long memory;
-
-        /** From whom data needed to be received or sent. */
-	int peer;
-
-	public TaskStage(int type, double data, double time, double stageid, long memory, int peer, int vpeer) {
+	/**
+	 * The targeted cloudlet based on the type of operation performed by the task.
+	 * It may be:
+	 * -) The cloudlet where processing is done (type == EXECUTION)
+	 * -) The cloudlet from whom taskLength need to be received (type == WAIT_RECV)
+	 * -) The cloudlet to whom taskLength need to be sent to (type == WAIT_SEND).
+	 */
+	private NetworkCloudlet targetCloudlet;
+	
+	public TaskStage(TaskStageStatus type, long taskLength, double stageId, NetworkCloudlet cl) {
 		super();
 		this.type = type;
-		this.data = data;
-		this.time = time;
-		this.stageid = stageid;
-		this.memory = memory;
-		this.peer = peer;
-		this.vpeer = vpeer;
+		this.taskLength = taskLength;
+		this.time = 0;
+		this.stageId = stageId;
+
+		this.targetCloudlet = cl;
 	}
+
+	public TaskStageStatus getType() { return type; }
+
+	public long getTaskLength() { return taskLength; }
+
+	public double getTime() { return time; }
+	public void setTime(double time) { this.time = time; }
+
+	public double getStageId() { return stageId; }
+
+	public NetworkCloudlet getTargetCloudlet() { return targetCloudlet; }
 }

@@ -11,6 +11,8 @@ package org.cloudbus.cloudsim.power;
 import java.util.List;
 
 import org.cloudbus.cloudsim.Host;
+import org.cloudbus.cloudsim.core.GuestEntity;
+import org.cloudbus.cloudsim.selectionPolicies.SelectionPolicy;
 import org.cloudbus.cloudsim.util.MathUtil;
 
 /**
@@ -24,7 +26,7 @@ import org.cloudbus.cloudsim.util.MathUtil;
  * <li><a href="http://dx.doi.org/10.1002/cpe.1867">Anton Beloglazov, and Rajkumar Buyya, "Optimal Online Deterministic Algorithms and Adaptive
  * Heuristics for Energy and Performance Efficient Dynamic Consolidation of Virtual Machines in
  * Cloud Data Centers", Concurrency and Computation: Practice and Experience (CCPE), Volume 24,
- * Issue 13, Pages: 1397-1420, John Wiley & Sons, Ltd, New York, USA, 2012</a>
+ * Issue 13, Pages: 1397-1420, John Wiley &amp; Sons, Ltd, New York, USA, 2012</a>
  * </ul>
  * 
  * @author Anton Beloglazov
@@ -44,7 +46,7 @@ public class PowerVmAllocationPolicyMigrationLocalRegressionRobust extends
 	 */
 	public PowerVmAllocationPolicyMigrationLocalRegressionRobust(
 			List<? extends Host> hostList,
-			PowerVmSelectionPolicy vmSelectionPolicy,
+			SelectionPolicy<GuestEntity> vmSelectionPolicy,
 			double safetyParameter,
 			double schedulingInterval,
 			PowerVmAllocationPolicyMigrationAbstract fallbackVmAllocationPolicy,
@@ -68,7 +70,7 @@ public class PowerVmAllocationPolicyMigrationLocalRegressionRobust extends
 	 */
 	public PowerVmAllocationPolicyMigrationLocalRegressionRobust(
 			List<? extends Host> hostList,
-			PowerVmSelectionPolicy vmSelectionPolicy,
+			SelectionPolicy<GuestEntity> vmSelectionPolicy,
 			double safetyParameter,
 			double schedulingInterval,
 			PowerVmAllocationPolicyMigrationAbstract fallbackVmAllocationPolicy) {
