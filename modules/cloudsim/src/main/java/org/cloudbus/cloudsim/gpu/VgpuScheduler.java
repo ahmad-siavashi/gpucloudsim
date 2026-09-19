@@ -11,7 +11,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.Predicate;
 import org.cloudbus.cloudsim.Pe;
 import org.cloudbus.cloudsim.Vm;
-import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVideoCardTags;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicy;
 
 /**
@@ -52,7 +51,7 @@ public abstract class VgpuScheduler {
 	 * Creates a new VgpuScheduler.
 	 * 
 	 * @param videoCardType       type of the video card (see
-	 *                            {@link GridVideoCardTags})
+	 *                            {@link VideoCardTags})
 	 * @param pgpuList            list of video card pgpus
 	 * @param pgpuSelectionPolicy the policy of video card pgpus allocation to vgpus
 	 */

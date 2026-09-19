@@ -2,7 +2,6 @@ package org.cloudbus.cloudsim.gpu.core;
 
 import org.cloudbus.cloudsim.core.CloudSimTags;
 import org.cloudbus.cloudsim.gpu.GpuVm;
-import org.cloudbus.cloudsim.gpu.remote.RemoteGpuDatacenterEx;
 
 /**
  * Contains Gpu-related events in the simulator.
@@ -32,7 +31,8 @@ public enum GpuCloudSimTags implements CloudSimTags {
 
 	/**
 	 * Denotes an event to perform a {@link GpuVm} placement in a
-	 * {@link RemoteGpuDatacenterEx}.
+	 * {@link org.cloudbus.cloudsim.gpu.remote.RemoteGpuDatacenterEx
+	 * RemoteGpuDatacenterEx}.
 	 */
 	GPU_VM_DATACENTER_PLACEMENT,
 
