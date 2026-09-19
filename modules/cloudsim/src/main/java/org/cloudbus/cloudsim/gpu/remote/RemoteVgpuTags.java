@@ -10,28 +10,52 @@ import org.cloudbus.cloudsim.gpu.Vgpu;
  *
  */
 public class RemoteVgpuTags {
-	public static final String REMOTE_EXCLUSIVE = "RE";
-	public static final String REMOTE_SHARED = "RS";
-	public static final String LOCAL_EXCLUSIVE = "LE";
-	public static final String LOCAL_SHARED = "LS";
 
-	public static String getVgpuMode(String vgpuMode) {
-		switch (vgpuMode) {
-		case RemoteVgpuTags.REMOTE_EXCLUSIVE:
-			return "RE";
-		case RemoteVgpuTags.REMOTE_SHARED:
-			return "RS";
-		case RemoteVgpuTags.LOCAL_EXCLUSIVE:
-			return "LE";
-		case RemoteVgpuTags.LOCAL_SHARED:
-			return "LS";
-		default:
-			return "Unknown";
+	/**
+	 * The tenancy of a {@link RemoteVgpu}; it tells whether the vGPU may be
+	 * allocated on a host other than the host of its VM (remote) or not (local),
+	 * and whether it may share its pGPU (shared) or not (exclusive).
+	 */
+	public enum Tenancy {
+
+		/** The vGPU may be on any host and does not share its pGPU. */
+		REMOTE_EXCLUSIVE("RE"),
+
+		/** The vGPU may be on any host and may share its pGPU. */
+		REMOTE_SHARED("RS"),
+
+		/** The vGPU must be on the host of its VM and does not share its pGPU. */
+		LOCAL_EXCLUSIVE("LE"),
+
+		/** The vGPU must be on the host of its VM and may share its pGPU. */
+		LOCAL_SHARED("LS");
+
+		/** The short name of the tenancy */
+		private final String shortName;
+
+		Tenancy(String shortName) {
+			this.shortName = shortName;
+		}
+
+		@Override
+		public String toString() {
+			return shortName;
 		}
 	}
 
+	/**
+	 * @return the tenancy of the vGPU, which must be a {@link RemoteVgpu}; there is
+	 *         no default tenancy
+	 */
+	public static Tenancy getTenancy(Vgpu vgpu) {
+		if (!(vgpu instanceof RemoteVgpu)) {
+			throw new IllegalArgumentException("Vgpu #" + vgpu.getId() + " has no tenancy; use a RemoteVgpu");
+		}
+		return ((RemoteVgpu) vgpu).getTenancy();
+	}
+
 	public static boolean isLocal(Vgpu vgpu) {
-		String tenancy = vgpu.getTenancy();
+		Tenancy tenancy = getTenancy(vgpu);
 		switch (tenancy) {
 		case LOCAL_EXCLUSIVE:
 		case LOCAL_SHARED:
@@ -46,7 +70,7 @@ public class RemoteVgpuTags {
 	}
 	
 	public static boolean isShared(Vgpu vgpu) {
-		String tenancy = vgpu.getTenancy();
+		Tenancy tenancy = getTenancy(vgpu);
 		switch (tenancy) {
 		case LOCAL_SHARED:
 		case REMOTE_SHARED:

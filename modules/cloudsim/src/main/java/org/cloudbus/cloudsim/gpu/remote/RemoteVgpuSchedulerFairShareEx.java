@@ -34,10 +34,7 @@ public class RemoteVgpuSchedulerFairShareEx extends PerformanceVgpuSchedulerFair
 
 	@Override
 	public boolean isSuitable(Pgpu pgpu, Vgpu vgpu) {
-		final int gddramShare = vgpu.getCurrentRequestedGddram();
-		final long bwShare = vgpu.getCurrentRequestedBw();
-		if (!pgpu.getGddramProvisioner().isSuitableForVgpu(vgpu, gddramShare)
-				|| !pgpu.getBwProvisioner().isSuitableForVgpu(vgpu, bwShare)) {
+		if (!super.isSuitable(pgpu, vgpu)) {
 			return false;
 		}
 		List<Vgpu> pgpuVgpus = getPgpuVgpuMap().get(pgpu);

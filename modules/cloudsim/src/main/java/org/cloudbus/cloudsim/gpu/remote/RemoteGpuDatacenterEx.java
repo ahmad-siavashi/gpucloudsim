@@ -10,7 +10,6 @@ import org.cloudbus.cloudsim.core.SimEvent;
 import org.cloudbus.cloudsim.gpu.BusTags;
 import org.cloudbus.cloudsim.gpu.GpuCloudlet;
 import org.cloudbus.cloudsim.gpu.GpuTask;
-import org.cloudbus.cloudsim.gpu.GpuVm;
 import org.cloudbus.cloudsim.gpu.core.GpuCloudSimTags;
 import org.cloudbus.cloudsim.gpu.placement.GpuDatacenterBrokerEx;
 import org.cloudbus.cloudsim.gpu.placement.GpuDatacenterEx;
@@ -32,10 +31,9 @@ public class RemoteGpuDatacenterEx extends GpuDatacenterEx {
 	}
 
 	protected boolean hasRemoteGpuOverhead(GpuTask gt) {
-		GpuVm vm = getGpuTaskVm(gt);
 		if (getVmAllocationPolicy() instanceof RemoteGpuVmAllocationPolicy) {
 			RemoteGpuVmAllocationPolicy vmAllocationPolicy = (RemoteGpuVmAllocationPolicy) getVmAllocationPolicy();
-			if (vmAllocationPolicy.hasRemoteVgpu(vm)) {
+			if (vmAllocationPolicy.isRemoteVgpu(getGpuTaskVm(gt).getVgpu(gt))) {
 				return true;
 			}
 		}

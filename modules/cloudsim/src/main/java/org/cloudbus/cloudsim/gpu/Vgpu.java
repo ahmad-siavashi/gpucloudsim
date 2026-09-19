@@ -41,9 +41,6 @@ public class Vgpu {
 	/** The Virtual GPU type. */
 	private String type;
 
-	/** The vGPU tenancy */
-	private String tenancy;
-
 	/** The video card which the vgpu is assigned to. **/
 	private VideoCard videoCard;
 
@@ -77,8 +74,8 @@ public class Vgpu {
 	 */
 	private final List<VgpuStateHistoryEntry> stateHistory = new LinkedList<VgpuStateHistoryEntry>();
 
-	public Vgpu(int vgpuId, double mips, int numberOfPes, int gddram, long bw, String type, String tenancy,
-			GpuTaskScheduler scheduler, int PCIeBw) {
+	public Vgpu(int vgpuId, double mips, int numberOfPes, int gddram, long bw, String type, GpuTaskScheduler scheduler,
+			int PCIeBw) {
 		
 		setInMigration(false);
 		setBeingInstantiated(true);
@@ -90,7 +87,6 @@ public class Vgpu {
 		setGddram(gddram);
 		setBw(bw);
 		setType(type);
-		setTenancy(tenancy);
 		setGpuTaskScheduler(scheduler);
 		setPCIeBw(PCIeBw);
 
@@ -531,13 +527,5 @@ public class Vgpu {
 
 	public void setVideoCard(VideoCard videoCard) {
 		this.videoCard = videoCard;
-	}
-
-	public String getTenancy() {
-		return tenancy;
-	}
-
-	protected void setTenancy(String tenancy) {
-		this.tenancy = tenancy;
 	}
 }

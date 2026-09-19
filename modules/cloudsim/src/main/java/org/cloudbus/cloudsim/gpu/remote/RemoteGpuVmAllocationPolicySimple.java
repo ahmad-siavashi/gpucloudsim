@@ -7,7 +7,6 @@ import org.cloudbus.cloudsim.Vm;
 import org.cloudbus.cloudsim.gpu.GpuHost;
 import org.cloudbus.cloudsim.gpu.GpuVm;
 import org.cloudbus.cloudsim.gpu.GpuVmAllocationPolicySimple;
-import org.cloudbus.cloudsim.gpu.Vgpu;
 
 /**
  * This class extends {@link RemoteGpuVmAllocationPolicy} and implements
@@ -31,42 +30,21 @@ public class RemoteGpuVmAllocationPolicySimple extends RemoteGpuVmAllocationPoli
 	@Override
 	public boolean allocateHostForVm(Vm vm) {
 		if (!getVmTable().containsKey(vm.getUid())) {
-			Vgpu vgpu = ((GpuVm) vm).getVgpu();
-			if (vgpu == null) {
-				for (Host host : this.<Host>getHostList()) {
-					boolean result = allocateHostForVm(vm, host);
-					if (result) {
+			GpuVm gpuVm = (GpuVm) vm;
+			// A VM with a local vGPU needs a GPU-equipped host
+			boolean hasLocalVgpu = gpuVm.getVgpuList().stream().anyMatch(RemoteVgpuTags::isLocal);
+			for (Host host : hasLocalVgpu ? getGpuHostList() : this.<Host>getHostList()) {
+				boolean result = allocateHostForVm(vm, host);
+				if (result) {
+					if (allocateGpusForVm(gpuVm, (GpuHost) host)) {
 						return true;
 					}
-				}
-			} else if (RemoteVgpuTags.isLocal(vgpu)) {
-				for (GpuHost host : getGpuHostList()) {
-					boolean result = allocateHostForVm(vm, host);
-					if (result) {
-						if (allocateGpuForVgpu(vgpu, host)) {
-							return true;
-						}
-						deallocateHostForVm(vm);
+					deallocateHostForVm(vm);
+					// Remote vGPUs do not depend on the host of the VM
+					if (!hasLocalVgpu) {
+						return false;
 					}
 				}
-			} else {
-				// vGPU allocation
-				boolean isVgpuAllocated = false;
-				for (GpuHost gpuHost : getGpuHostList()) {
-					if (allocateGpuForVgpu(vgpu, gpuHost)) {
-						isVgpuAllocated = true;
-						break;
-					}
-				}
-				if (!isVgpuAllocated) {
-					return false;
-				}
-				for (Host host : this.<Host>getHostList()) {
-					if (allocateHostForVm(vm, host)) {
-						return true;
-					}
-				}
-				deallocateGpuForVgpu(vgpu);
 			}
 		}
 		return false;
