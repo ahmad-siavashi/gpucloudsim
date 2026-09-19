@@ -1,103 +1,106 @@
 package org.cloudbus.cloudsim.gpu.hardware_assisted.grid;
 
-import org.cloudbus.cloudsim.gpu.VideoCard;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.IntStream;
+
+import org.cloudbus.cloudsim.gpu.VideoCardTags;
 
 /**
  * 
- * Methods & constants that are related to {@link VideoCard VideoCards} types
- * and configurations.
+ * NVIDIA vGPU rules of {@link VideoCardTags video cards}. Values follow NVIDIA
+ * Virtual GPU Software User Guide, Release 20 (Chapter 9, Virtual GPU Types
+ * Reference).
  * 
  * @author Ahmad Siavashi
  * 
  */
 public class GridVideoCardTags {
 
-	// Constants
+	/** Maximum number of vGPUs assigned to a single VM */
+	public final static int MAX_VGPUS_PER_VM = 16;
 
-	public final static String NVIDIA_K1_CARD = "NVIDIA K1";
-	public final static String NVIDIA_K2_CARD = "NVIDIA K2";
-	public final static String NVIDIA_K80_CARD = "NVIDIA K80";
-	public final static String NVIDIA_M60_CARD = "NVIDIA M60";
+	/**
+	 * vGPU placements of a video card. A vGPU with a frame buffer of s GB occupies
+	 * the placements [id, id + s) of its GPU, where id is one of its placement IDs.
+	 */
+	public static class Placements {
+		/** Maximum vGPUs on a GPU, regardless of their types */
+		public final int maxVgpusPerGpu;
+		/** All vGPUs of a VM must be of the same type (Ampere boards) */
+		public final boolean sameTypePerVm;
+		private final Map<Integer, int[]> equalSize = new HashMap<>();
+		private final Map<Integer, int[]> mixedSize = new HashMap<>();
 
-	public final static int NVIDIA_KEPLER_SMX_CUDA_CORES = 192;
-	public final static int NVIDIA_MAXWELL_SMM_CUDA_CORES = 128;
-
-	// NVIDIA GRID K1 Spec
-
-	/** 130 Watts */
-	public final static int NVIDIA_K1_CARD_POWER = 130;
-	/** 4 GPUs */
-	public final static int NVIDIA_K1_CARD_GPUS = 4;
-	/** GPU type */
-	public final static String NVIDIA_K1_GPU_TYPE = "GK107";
-	/** 4 GBs/GPU */
-	public final static int NVIDIA_K1_CARD_GPU_MEM = 4096;
-	/** 1 SMX / GPU */
-	public final static int NVIDIA_K1_CARD_GPU_PES = 1;
-	/** 850 MHz */
-	public final static double NVIDIA_K1_CARD_PE_MIPS = getGpuPeMipsFromFrequency(NVIDIA_K1_CARD, 850);
-	/** 4 */
-	public final static int NVIDIA_K1_CARD_NUM_BUS = 4;
-	/** 4 x 28.5/s */
-	public final static long NVIDIA_K1_CARD_BW_PER_BUS = (long) 28.5 * 1024;
-
-	public final static String[] K1_VGPUS = { GridVgpuTags.K1_K120Q, GridVgpuTags.K1_K140Q, GridVgpuTags.K1_K160Q,
-			GridVgpuTags.K1_K180Q };
-
-	// NVIDIA GRID K2 Spec
-
-	/** 225 Watts */
-	public final static int NVIDIA_K2_CARD_POWER = 225;
-	/** 2 GPUs */
-	public final static int NVIDIA_K2_CARD_GPUS = 2;
-	/** GPU Type */
-	public final static String NVIDIA_K2_GPU_TYPE = "GK104";
-	/** 4 GBs/GPU */
-	public final static int NVIDIA_K2_CARD_GPU_MEM = 4096;
-	/** 1 SMX / GPU */
-	public final static int NVIDIA_K2_CARD_GPU_PES = 8;
-	/** 750 MHz */
-	public final static double NVIDIA_K2_CARD_PE_MIPS = getGpuPeMipsFromFrequency(NVIDIA_K2_CARD, 745);
-	/** 2 */
-	public final static int NVIDIA_K2_CARD_NUM_BUS = 2;
-	/** 2 x 160.0 GB/s */
-	public final static long NVIDIA_K2_CARD_BW_PER_BUS = 160 * 1024;
-
-	public final static String[] K2_VGPUS = { GridVgpuTags.K2_K220Q, GridVgpuTags.K2_K240Q, GridVgpuTags.K2_K260Q,
-			GridVgpuTags.K2_K280Q };
-
-	public static double getGpuPeFrequencyFromMips(String type, double mips) {
-		double frequency = mips;
-		switch (type) {
-		case NVIDIA_K1_CARD:
-		case NVIDIA_K2_CARD:
-		case NVIDIA_K80_CARD:
-			frequency /= NVIDIA_KEPLER_SMX_CUDA_CORES * 2;
-			break;
-		case NVIDIA_M60_CARD:
-			frequency /= NVIDIA_MAXWELL_SMM_CUDA_CORES * 2;
-			break;
-		default:
-			break;
+		Placements(int maxVgpusPerGpu, boolean sameTypePerVm) {
+			this.maxVgpusPerGpu = maxVgpusPerGpu;
+			this.sameTypePerVm = sameTypePerVm;
 		}
-		return frequency;
+
+		/** Equal-size IDs are 0, s, 2s, ... for the maximum vGPUs per GPU. */
+		Placements add(int sizeGb, int maxEqualSize, int... mixedSizeIds) {
+			equalSize.put(sizeGb, IntStream.range(0, maxEqualSize).map(k -> k * sizeGb).toArray());
+			mixedSize.put(sizeGb, mixedSizeIds);
+			return this;
+		}
+
+		/**
+		 * @return the placement IDs of a vGPU of the given size, or null if the size
+		 *         is not supported
+		 */
+		public int[] getIds(int sizeGb, boolean mixedSizeMode) {
+			return (mixedSizeMode ? mixedSize : equalSize).get(sizeGb);
+		}
+
+		/**
+		 * @return the frame buffer (MB) of a GPU of the video card
+		 */
+		public int getGpuGddram() {
+			return Arrays.stream(getSizes()).max().getAsInt() * 1024;
+		}
+
+		public int[] getSizes() {
+			return equalSize.keySet().stream().mapToInt(Integer::intValue).sorted().toArray();
+		}
 	}
 
-	public static double getGpuPeMipsFromFrequency(String type, double frequency) {
-		double mips = frequency;
-		switch (type) {
-		case NVIDIA_K1_CARD:
-		case NVIDIA_K2_CARD:
-		case NVIDIA_K80_CARD:
-			mips *= NVIDIA_KEPLER_SMX_CUDA_CORES * 2;
-			break;
-		case NVIDIA_M60_CARD:
-			mips *= NVIDIA_MAXWELL_SMM_CUDA_CORES * 2;
-			break;
-		default:
-			break;
-		}
-		return mips;
+	private final static Map<String, Placements> PLACEMENTS = new HashMap<>();
+
+	static {
+		// User Guide Section 9.3.10 (16 GB); mixed-size IDs equal equal-size IDs
+		PLACEMENTS.put(VideoCardTags.NVIDIA_A16_CARD, new Placements(16, true)
+				.add(16, 1, 0)
+				.add(8, 2, 0, 8)
+				.add(4, 4, 0, 4, 8, 12)
+				.add(2, 8, 0, 2, 4, 6, 8, 10, 12, 14)
+				.add(1, 16, IntStream.range(0, 16).toArray()));
+		// User Guide Section 9.3.5 (48 GB); at most 32 vGPUs on an L40S
+		PLACEMENTS.put(VideoCardTags.NVIDIA_L40S_CARD, new Placements(32, false)
+				.add(48, 1, 0)
+				.add(24, 2, 0, 24)
+				.add(16, 3, 0, 32)
+				.add(12, 4, 0, 12, 24, 36)
+				.add(8, 6, 0, 16, 24, 40)
+				.add(6, 8, 0, 6, 12, 18, 24, 30, 36, 42)
+				.add(4, 12, 0, 8, 12, 20, 24, 32, 36, 44)
+				.add(3, 16, 0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45)
+				.add(2, 24, 0, 4, 6, 10, 12, 16, 18, 22, 24, 28, 30, 34, 36, 40, 42, 46)
+				.add(1, 32, 0, 5, 6, 11, 12, 17, 18, 23, 24, 29, 30, 35, 36, 41, 42, 47));
+	}
+
+	/**
+	 * @return the vGPU placements of the video card type, or null if unknown
+	 */
+	public static Placements getPlacements(String videoCardType) {
+		return PLACEMENTS.get(videoCardType);
+	}
+
+	/**
+	 * @return the frame buffer sizes (MB) of the vGPU types of the video card
+	 */
+	public static int[] getVgpuGddrams(String videoCardType) {
+		return Arrays.stream(getPlacements(videoCardType).getSizes()).map(s -> s * 1024).toArray();
 	}
 
 	/**
