@@ -225,6 +225,17 @@ public class Vgpu {
 	}
 
 	/**
+	 * Gets the unique id of the virtual gpu, which keys its MIPS in GPU PE
+	 * provisioners. It differs from the uid of its VM, so vgpus of the same VM on
+	 * the same pgpu are tracked separately.
+	 * 
+	 * @return the uid
+	 */
+	public String getUid() {
+		return (getVm() == null ? "" : getVm().getUid()) + "-vgpu-" + getId();
+	}
+
+	/**
 	 * Sets the Vgpu id.
 	 * 
 	 * @param id the new Vgpu id
@@ -347,8 +358,8 @@ public class Vgpu {
 	 */
 	public void setGpuVm(GpuVm vm) {
 		this.vm = vm;
-		if (!vm.hasVgpu()) {
-			vm.setVgpu(this);
+		if (!vm.getVgpuList().contains(this)) {
+			vm.addVgpu(this);
 		}
 	}
 

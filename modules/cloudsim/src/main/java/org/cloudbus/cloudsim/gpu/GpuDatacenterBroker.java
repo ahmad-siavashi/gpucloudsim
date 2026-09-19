@@ -105,8 +105,7 @@ public class GpuDatacenterBroker extends DatacenterBroker {
 					datacenterId, ", Host #", vm.getHost().getId());
 			System.out.println("{'clock': " + CloudSim.clock() + ", 'type': 'vm allocation',  'vm': " + vm.getId()
 					+ ", 'host': " + vm.getHost().getId() + "}");
-			Vgpu vgpu = ((GpuVm) vm).getVgpu();
-			if (vgpu != null) {
+			for (Vgpu vgpu : ((GpuVm) vm).getVgpuList()) {
 				Pgpu pgpu = vgpu.getVideoCard().getVgpuScheduler().getPgpuForVgpu(vgpu);
 				System.out.println("{'clock': " + CloudSim.clock() + ", 'type': 'vgpu allocation', 'vgpu': "
 						+ vgpu.getId() + ", 'pgpu': " + pgpu.getId() + ", 'vm': " + vm.getId() + "}");

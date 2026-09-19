@@ -6,7 +6,7 @@ import java.util.List;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.Predicate;
 import org.cloudbus.cloudsim.Pe;
-import org.cloudbus.cloudsim.Vm;
+import org.cloudbus.cloudsim.gpu.provisioners.GpuPeProvisionerSimple;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicy;
 
 /**
@@ -41,7 +41,7 @@ public class VgpuSchedulerSpaceShared extends VgpuScheduler {
 		pgpu.getBwProvisioner().deallocateBwForVgpu(vgpu);
 		getPgpuVgpuMap().get(pgpu).remove(vgpu);
 		for (Pe pe : getVgpuPeMap().get(vgpu)) {
-			pe.getPeProvisioner().deallocateMipsForVm(vgpu.getVm());
+			((GpuPeProvisionerSimple) pe.getPeProvisioner()).deallocateMipsForGuest(vgpu.getUid());
 		}
 		getVgpuPeMap().remove(vgpu);
 		getMipsMap().remove(vgpu);
@@ -85,7 +85,6 @@ public class VgpuSchedulerSpaceShared extends VgpuScheduler {
 
 	@Override
 	public boolean allocatePgpuForVgpu(Pgpu pgpu, Vgpu vgpu, List<Double> mipsShare, int gddramShare, long bwShare) {
-		final Vm vm = vgpu.getVm();
 
 		if (!isSuitable(pgpu, vgpu)) {
 			return false;
@@ -111,7 +110,7 @@ public class VgpuSchedulerSpaceShared extends VgpuScheduler {
 		List<Pe> selectedPes = new ArrayList<Pe>();
 		for (int i = 0; i < mipsShare.size(); i++) {
 			Pe pe = selectedPgpuPes.get(i);
-			pe.getPeProvisioner().allocateMipsForVm(vm, mipsShare.get(i));
+			pe.getPeProvisioner().allocateMipsForGuest(vgpu.getUid(), mipsShare.get(i));
 			selectedPes.add(pe);
 		}
 		getPgpuVgpuMap().get(pgpu).add(vgpu);

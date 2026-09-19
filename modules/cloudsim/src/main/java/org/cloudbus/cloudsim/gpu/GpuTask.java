@@ -63,6 +63,12 @@ public class GpuTask {
 	private int pesLimit;
 
 	/**
+	 * The id of the {@link Vgpu} of the VM that executes the task. The value -1
+	 * selects the first vgpu of the VM.
+	 */
+	private int vgpuId = -1;
+
+	/**
 	 * The execution status of this task.
 	 */
 	private int status;
@@ -1086,6 +1092,24 @@ public class GpuTask {
 	 */
 	public int getTaskId() {
 		return taskId;
+	}
+
+	/**
+	 * @return the id of the vgpu that executes the task, or -1 for the first vgpu
+	 *         of the VM
+	 */
+	public int getVgpuId() {
+		return vgpuId;
+	}
+
+	/**
+	 * A task of a VM with more than one vgpu runs on the first one unless it is
+	 * bound to another.
+	 *
+	 * @param vgpuId the id of the vgpu of the VM that executes the task
+	 */
+	public void setVgpuId(int vgpuId) {
+		this.vgpuId = vgpuId;
 	}
 
 	/**

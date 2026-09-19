@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 
 import org.cloudbus.cloudsim.Host;
@@ -53,17 +52,16 @@ public class GridGpuVmAllocationPolicyBestFit extends GpuVmAllocationPolicy {
 	public boolean allocateHostForVm(Vm vm) {
 		if (!getVmTable().containsKey(vm.getUid())) {
 			GpuVm gpuVm = (GpuVm) vm;
-			Vgpu vgpu = gpuVm.getVgpu();
 			// Case 1 - VM with GPU tasks
-			if (vgpu != null) {
+			if (gpuVm.hasVgpu()) {
 				memoryAwareSortGpuHost(getGpuHostList());
 				for (GpuHost pm : getGpuHostList()) {
 					if (pm.isSuitableForVm(gpuVm)) {
-						if (allocateGpuForVgpu(vgpu, pm)) {
+						if (allocateGpusForVm(gpuVm, pm)) {
 							if (allocateHostForVm(gpuVm, pm)) {
 								return true;
 							}
-							deallocateGpuForVgpu(vgpu);
+							gpuVm.getVgpuList().forEach(this::deallocateGpuForVgpu);
 						}
 					}
 				}
@@ -90,15 +88,12 @@ public class GridGpuVmAllocationPolicyBestFit extends GpuVmAllocationPolicy {
 	protected boolean allocateGpuForVgpu(Vgpu vgpu, GpuHost gpuHost) {
 		if (!getVgpuHosts().containsKey(vgpu)) {
 			for (VideoCard videoCard : gpuHost.getVideoCardAllocationPolicy().getVideoCards()) {
-				for (Entry<Pgpu, List<Vgpu>> entry : videoCard.getVgpuScheduler().getPgpuVgpuMap().entrySet()) {
-					Pgpu pgpu = entry.getKey();
-					List<Vgpu> vgpus = entry.getValue();
-					if (vgpus.isEmpty() || vgpus.get(0).getGddram() == vgpu.getGddram()) {
-						boolean result = gpuHost.vgpuCreate(vgpu, pgpu);
-						if (result) {
-							getVgpuHosts().put(vgpu, gpuHost);
-							return true;
-						}
+				// The vGPU scheduler checks the vGPU placement rules
+				for (Pgpu pgpu : videoCard.getVgpuScheduler().getPgpuVgpuMap().keySet()) {
+					boolean result = gpuHost.vgpuCreate(vgpu, pgpu);
+					if (result) {
+						getVgpuHosts().put(vgpu, gpuHost);
+						return true;
 					}
 				}
 			}

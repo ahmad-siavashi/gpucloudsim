@@ -77,17 +77,21 @@ public class GpuDatacenterEx extends PowerGpuDatacenter {
 		if (newVmList.isEmpty()) {
 			return;
 		}
+		// New vGPUs may change the MIPS of vGPUs on their pGPUs
+		updateGpuTaskProcessing();
 		long startTime = System.nanoTime();
-		Map<GpuVm, Boolean> results = ((GpuVmAllocationPolicy) getVmAllocationPolicy())
+		GpuVmAllocationPolicy policy = (GpuVmAllocationPolicy) getVmAllocationPolicy();
+		Map<GpuVm, Boolean> results = policy
 				.allocateHostForVms(newVmList.stream().map(x -> x.getKey()).collect(Collectors.toList()));
 		long endTime = System.nanoTime();
 		long durationMs = (endTime - startTime) / 1000000;
 		System.out.println(
 				"{'clock': " + CloudSim.clock() + ", 'type': 'placement duration', 'duration': " + durationMs + "}");
 		for (Entry<GpuVm, Boolean> result : results.entrySet()) {
-			processVmCreate(result.getKey(), true, result.getValue());
+			processVmCreate(result.getKey(), true, policy.ensureVgpusAllocated(result.getKey(), result.getValue()));
 		}
 		getNewVms().clear();
+		refreshGpuTaskProcessing();
 	}
 
 	protected void processVmCreate(GpuVm vm, boolean ack, boolean result) {
@@ -109,7 +113,6 @@ public class GpuDatacenterEx extends PowerGpuDatacenter {
 		if (result) {
 			getVmList().add(vm);
 			GpuVm gpuVm = (GpuVm) vm;
-			Vgpu vgpu = gpuVm.getVgpu();
 
 			if (vm.isBeingInstantiated()) {
 				vm.setBeingInstantiated(false);
@@ -118,7 +121,7 @@ public class GpuDatacenterEx extends PowerGpuDatacenter {
 			vm.updateVmProcessing(CloudSim.clock(),
 					getVmAllocationPolicy().getHost(vm).getVmScheduler().getAllocatedMipsForVm(vm));
 
-			if (vgpu != null) {
+			for (Vgpu vgpu : gpuVm.getVgpuList()) {
 				if (vgpu.isBeingInstantiated()) {
 					vgpu.setBeingInstantiated(false);
 				}

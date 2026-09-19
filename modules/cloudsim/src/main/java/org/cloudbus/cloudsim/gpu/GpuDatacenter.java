@@ -129,8 +129,7 @@ public class GpuDatacenter extends Datacenter {
 			GpuHost host = (GpuHost) list.get(i);
 			for (Vm vm : host.getVmList()) {
 				GpuVm gpuVm = (GpuVm) vm;
-				Vgpu vgpu = gpuVm.getVgpu();
-				if (vgpu != null) {
+				for (Vgpu vgpu : gpuVm.getVgpuList()) {
 					while (vgpu.getGpuTaskScheduler().hasFinishedTasks()) {
 						ResGpuTask rgt = vgpu.getGpuTaskScheduler().getNextFinishedTask();
 						try {
@@ -166,7 +165,10 @@ public class GpuDatacenter extends Datacenter {
 		Vm vm = (Vm) ev.getData();
 		Log.printLine(CloudSim.clock() + ": Trying to Create VM #" + vm.getId() + " in " + getName());
 
-		boolean result = getVmAllocationPolicy().allocateHostForVm(vm);
+		// A new vGPU may change the MIPS of vGPUs on its pGPU
+		updateGpuTaskProcessing();
+		GpuVmAllocationPolicy policy = (GpuVmAllocationPolicy) getVmAllocationPolicy();
+		boolean result = policy.ensureVgpusAllocated((GpuVm) vm, policy.allocateHostForVm(vm));
 
 		if (ack) {
 			int[] data = new int[3];
@@ -184,7 +186,6 @@ public class GpuDatacenter extends Datacenter {
 		if (result) {
 			getVmList().add(vm);
 			GpuVm gpuVm = (GpuVm) vm;
-			Vgpu vgpu = gpuVm.getVgpu();
 
 			if (vm.isBeingInstantiated()) {
 				vm.setBeingInstantiated(false);
@@ -193,7 +194,7 @@ public class GpuDatacenter extends Datacenter {
 			vm.updateVmProcessing(CloudSim.clock(),
 					getVmAllocationPolicy().getHost(vm).getVmScheduler().getAllocatedMipsForVm(vm));
 
-			if (vgpu != null) {
+			for (Vgpu vgpu : gpuVm.getVgpuList()) {
 				if (vgpu.isBeingInstantiated()) {
 					vgpu.setBeingInstantiated(false);
 				}
@@ -202,16 +203,29 @@ public class GpuDatacenter extends Datacenter {
 				vgpu.updateGpuTaskProcessing(CloudSim.clock(),
 						videoCard.getVgpuScheduler().getAllocatedMipsForVgpu(vgpu));
 			}
+			refreshGpuTaskProcessing();
 		}
 
+	}
+
+	/**
+	 * Re-estimates the finish time of GPU tasks after the MIPS of vGPUs changed.
+	 * Their progress must have been updated at the current time beforehand.
+	 */
+	protected void refreshGpuTaskProcessing() {
+		setGpuTaskLastProcessTime(Double.NEGATIVE_INFINITY);
+		updateGpuTaskProcessing();
 	}
 
 	@Override
 	protected void processVmDestroy(SimEvent ev, boolean ack) {
 		GpuVm vm = (GpuVm) ev.getData();
-		if (vm.hasVgpu()) {
-			((GpuVmAllocationPolicy) getVmAllocationPolicy()).deallocateGpuForVgpu(vm.getVgpu());
+		// A leaving vGPU may change the MIPS of vGPUs on its pGPU
+		updateGpuTaskProcessing();
+		for (Vgpu vgpu : vm.getVgpuList()) {
+			((GpuVmAllocationPolicy) getVmAllocationPolicy()).deallocateGpuForVgpu(vgpu);
 		}
+		refreshGpuTaskProcessing();
 		super.processVmDestroy(ev, ack);
 	}
 
@@ -228,8 +242,7 @@ public class GpuDatacenter extends Datacenter {
 			gt.setResourceParameter(getId(), getCharacteristics().getCostPerSecond(),
 					getCharacteristics().getCostPerBw());
 
-			GpuVm vm = getGpuTaskVm(gt);
-			Vgpu vgpu = vm.getVgpu();
+			Vgpu vgpu = getGpuTaskVm(gt).getVgpu(gt);
 
 			GpuTaskScheduler scheduler = vgpu.getGpuTaskScheduler();
 
