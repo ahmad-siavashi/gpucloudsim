@@ -31,15 +31,14 @@ import org.cloudbus.cloudsim.gpu.GpuVmAllocationPolicySimple;
 import org.cloudbus.cloudsim.gpu.Pgpu;
 import org.cloudbus.cloudsim.gpu.Vgpu;
 import org.cloudbus.cloudsim.gpu.VgpuScheduler;
+import org.cloudbus.cloudsim.gpu.VgpuSchedulerSpaceShared;
 import org.cloudbus.cloudsim.gpu.VideoCard;
 import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicy;
 import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicyDepthFirst;
-import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuSchedulerFairShareEx;
-import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuTags;
-import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVideoCardTags;
-import org.cloudbus.cloudsim.gpu.performance.models.PerformanceModelGpuNull;
+import org.cloudbus.cloudsim.gpu.VideoCardTags;
 import org.cloudbus.cloudsim.gpu.provisioners.GpuBwProvisionerShared;
 import org.cloudbus.cloudsim.gpu.provisioners.GpuGddramProvisionerSimple;
+import org.cloudbus.cloudsim.gpu.provisioners.GpuPeProvisionerSimple;
 import org.cloudbus.cloudsim.gpu.provisioners.VideoCardBwProvisioner;
 import org.cloudbus.cloudsim.gpu.provisioners.VideoCardBwProvisionerShared;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicy;
@@ -52,11 +51,14 @@ import org.cloudbus.cloudsim.provisioners.RamProvisionerSimple;
 import de.vandermeer.asciitable.AsciiTable;
 
 /**
- * This example demonstrates the use of gpu package in simulations. <br>
- * GPU virtualization mode: GRID <br>
- * Performance Model: off <br>
- * Interference Model: off <br>
- * Power Model: off
+ * Example 1, the basics. It builds the smallest GPU cloud: a host with an NVIDIA
+ * A16 video card, a VM and a GPU cloudlet. The cloudlet runs on the CPUs of the
+ * VM, then copies its input to the GPU, runs its GPU task and copies its output
+ * back. <br>
+ * The VM gets a whole GPU (pass-through): its vGPU has all SMs and memory of a
+ * pGPU, and the space-shared vGPU scheduler gives each pGPU to one vGPU. <br>
+ * New: host, video card, pGPU, VM, vGPU, GPU cloudlet and GPU task. <br>
+ * Next: Example 2 shares a pGPU among VMs.
  * 
  * @author Ahmad Siavashi
  * 
@@ -167,7 +169,8 @@ public class CloudSimGpuExample1 {
 	 */
 	private static GpuCloudlet createGpuCloudlet(int gpuCloudletId, int gpuTaskId, int brokerId) {
 		// Cloudlet properties
-		long length = (long) (400 * GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_PE_MIPS);
+		// 100 seconds on a CPU core
+		long length = (long) (100 * GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_PE_MIPS);
 		long fileSize = 300;
 		long outputSize = 300;
 		int pesNumber = 1;
@@ -175,12 +178,12 @@ public class CloudSimGpuExample1 {
 		UtilizationModel ramUtilizationModel = new UtilizationModelFull();
 		UtilizationModel bwUtilizationModel = new UtilizationModelFull();
 
-		// GpuTask properties
-		long taskLength = (long) (GridVideoCardTags.NVIDIA_K1_CARD_PE_MIPS * 150);
-		long taskInputSize = 128;
-		long taskOutputSize = 128;
-		long requestedGddramSize = 4 * 1024;
-		int numberOfBlocks = 2;
+		// GpuTask properties; one block per SM, each 300 seconds on an SM
+		long taskLength = (long) (VideoCardTags.NVIDIA_A16_CARD_PE_MIPS * 300);
+		long taskInputSize = 1024;
+		long taskOutputSize = 1024;
+		long requestedGddramSize = 8 * 1024;
+		int numberOfBlocks = VideoCardTags.NVIDIA_A16_CARD_GPU_PES;
 		UtilizationModel gpuUtilizationModel = new UtilizationModelFull();
 		UtilizationModel gddramUtilizationModel = new UtilizationModelFull();
 		UtilizationModel gddramBwUtilizationModel = new UtilizationModelFull();
@@ -205,14 +208,15 @@ public class CloudSimGpuExample1 {
 	 */
 	private static GpuVm createGpuVm(int vmId, int vgpuId, int brokerId) {
 		// VM description
-		double mips = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_PE_MIPS;
-		// image size (GB)
-		int size = 10;
-		// vm memory (GB)
-		int ram = 2;
-		long bw = 100;
+		double mips = GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_PE_MIPS;
+		// image size (MB)
+		int size = 100 * 1024;
+		// vm memory (MB)
+		int ram = 64 * 1024;
+		// 1 Gbit/s in MB/s
+		long bw = 125;
 		// number of cpus
-		int pesNumber = 4;
+		int pesNumber = 16;
 		// VMM name
 		String vmm = "vSphere";
 
@@ -221,8 +225,10 @@ public class CloudSimGpuExample1 {
 				new GpuCloudletSchedulerTimeShared());
 		// Create GpuTask Scheduler
 		GpuTaskSchedulerLeftover gpuTaskScheduler = new GpuTaskSchedulerLeftover();
-		// Create a Vgpu
-		Vgpu vgpu = GridVgpuTags.getK180Q(vgpuId, gpuTaskScheduler);
+		// Create a Vgpu as large as a pGPU of the A16, i.e. a passed-through pGPU
+		Vgpu vgpu = new Vgpu(vgpuId, VideoCardTags.NVIDIA_A16_CARD_PE_MIPS, VideoCardTags.NVIDIA_A16_CARD_GPU_PES,
+				VideoCardTags.NVIDIA_A16_CARD_GPU_MEM, VideoCardTags.NVIDIA_A16_CARD_BW_PER_BUS, "Pass-through",
+				gpuTaskScheduler, BusTags.PCI_E_4_X16_BW);
 		vm.setVgpu(vgpu);
 		return vm;
 	}
@@ -238,32 +244,32 @@ public class CloudSimGpuExample1 {
 		// We need to create a list to store our machines
 		List<GpuHost> hostList = new ArrayList<GpuHost>();
 		// Number of host's video cards
-		int numVideoCards = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_NUM_VIDEO_CARDS;
+		int numVideoCards = GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_A16_NUM_VIDEO_CARDS;
 		// To hold video cards
 		List<VideoCard> videoCards = new ArrayList<VideoCard>(numVideoCards);
 		for (int videoCardId = 0; videoCardId < numVideoCards; videoCardId++) {
 			List<Pgpu> pgpus = new ArrayList<Pgpu>();
-			// Adding an NVIDIA K1 Card
-			double mips = GridVideoCardTags.NVIDIA_K1_CARD_PE_MIPS;
-			int gddram = GridVideoCardTags.NVIDIA_K1_CARD_GPU_MEM;
-			long bw = GridVideoCardTags.NVIDIA_K1_CARD_BW_PER_BUS;
-			for (int pgpuId = 0; pgpuId < GridVideoCardTags.NVIDIA_K1_CARD_GPUS; pgpuId++) {
+			// Adding an NVIDIA A16 Card
+			double mips = VideoCardTags.NVIDIA_A16_CARD_PE_MIPS;
+			int gddram = VideoCardTags.NVIDIA_A16_CARD_GPU_MEM;
+			long bw = VideoCardTags.NVIDIA_A16_CARD_BW_PER_BUS;
+			for (int pgpuId = 0; pgpuId < VideoCardTags.NVIDIA_A16_CARD_GPUS; pgpuId++) {
 				List<Pe> pes = new ArrayList<Pe>();
-				for (int peId = 0; peId < GridVideoCardTags.NVIDIA_K1_CARD_GPU_PES; peId++) {
-					pes.add(new Pe(peId, new PeProvisionerSimple(mips)));
+				for (int peId = 0; peId < VideoCardTags.NVIDIA_A16_CARD_GPU_PES; peId++) {
+					pes.add(new Pe(peId, new GpuPeProvisionerSimple(mips)));
 				}
-				pgpus.add(new Pgpu(pgpuId, GridVideoCardTags.NVIDIA_K1_GPU_TYPE, pes,
+				pgpus.add(new Pgpu(pgpuId, VideoCardTags.NVIDIA_A16_GPU_TYPE, pes,
 						new GpuGddramProvisionerSimple(gddram), new GpuBwProvisionerShared(bw)));
 			}
 			// Pgpu selection policy
 			PgpuSelectionPolicy pgpuSelectionPolicy = new PgpuSelectionPolicyDepthFirst();
-			// Vgpu Scheduler
-			VgpuScheduler vgpuScheduler = new GridVgpuSchedulerFairShareEx(GridVideoCardTags.NVIDIA_K1_CARD, pgpus,
-					pgpuSelectionPolicy, new PerformanceModelGpuNull(), GridVideoCardTags.K1_VGPUS);
+			// Vgpu Scheduler; a pGPU runs one vGPU at a time
+			VgpuScheduler vgpuScheduler = new VgpuSchedulerSpaceShared(VideoCardTags.NVIDIA_A16_CARD, pgpus,
+					pgpuSelectionPolicy);
 			// PCI Express Bus Bw Provisioner
-			VideoCardBwProvisioner videoCardBwProvisioner = new VideoCardBwProvisionerShared(BusTags.PCI_E_3_X16_BW);
+			VideoCardBwProvisioner videoCardBwProvisioner = new VideoCardBwProvisionerShared(BusTags.PCI_E_4_X16_BW);
 			// Create a video card
-			VideoCard videoCard = new VideoCard(videoCardId, GridVideoCardTags.NVIDIA_K1_CARD, vgpuScheduler,
+			VideoCard videoCard = new VideoCard(videoCardId, VideoCardTags.NVIDIA_A16_CARD, vgpuScheduler,
 					videoCardBwProvisioner);
 			videoCards.add(videoCard);
 		}
@@ -275,25 +281,25 @@ public class CloudSimGpuExample1 {
 		List<Pe> peList = new ArrayList<Pe>();
 
 		// PE's MIPS power
-		double mips = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_PE_MIPS;
+		double mips = GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_PE_MIPS;
 
-		for (int peId = 0; peId < GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_NUM_PES; peId++) {
+		for (int peId = 0; peId < GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_NUM_PES; peId++) {
 			// Create PEs and add these into a list.
 			peList.add(new Pe(peId, new PeProvisionerSimple(mips)));
 		}
 
 		// Create Host with its id and list of PEs and add them to the list of machines
 		// host memory (MB)
-		int ram = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_RAM;
+		int ram = GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_RAM;
 		// host storage
-		long storage = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_STORAGE;
+		long storage = GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_STORAGE;
 		// host BW
-		int bw = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_BW;
+		int bw = GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_BW;
 		// Set VM Scheduler
 		VmScheduler vmScheduler = new VmSchedulerTimeShared(peList);
 		// Video Card Selection Policy
 		VideoCardAllocationPolicy videoCardAllocationPolicy = new VideoCardAllocationPolicyDepthFirst(videoCards);
-		GpuHost newHost = new GpuHost(hostId, GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3, new RamProvisionerSimple(ram),
+		GpuHost newHost = new GpuHost(hostId, GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_A16, new RamProvisionerSimple(ram),
 				new BwProvisionerSimple(bw), storage, peList, vmScheduler, videoCardAllocationPolicy);
 		hostList.add(newHost);
 
@@ -306,7 +312,7 @@ public class CloudSimGpuExample1 {
 		// operating system
 		String os = "Linux";
 		// VM Manager
-		String vmm = "Horizen";
+		String vmm = "vSphere";
 		// time zone this resource located (Tehran)
 		double time_zone = +3.5;
 		// the cost of using processing in this resource

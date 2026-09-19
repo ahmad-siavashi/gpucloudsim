@@ -3,7 +3,6 @@ package org.cloudbus.cloudsim.examples.gpu;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map.Entry;
@@ -15,7 +14,6 @@ import org.cloudbus.cloudsim.Pe;
 import org.cloudbus.cloudsim.Storage;
 import org.cloudbus.cloudsim.UtilizationModel;
 import org.cloudbus.cloudsim.UtilizationModelFull;
-import org.cloudbus.cloudsim.VmScheduler;
 import org.cloudbus.cloudsim.VmSchedulerTimeShared;
 import org.cloudbus.cloudsim.core.CloudSim;
 import org.cloudbus.cloudsim.gpu.BusTags;
@@ -28,29 +26,30 @@ import org.cloudbus.cloudsim.gpu.GpuTaskSchedulerLeftover;
 import org.cloudbus.cloudsim.gpu.GpuVm;
 import org.cloudbus.cloudsim.gpu.Pgpu;
 import org.cloudbus.cloudsim.gpu.Vgpu;
-import org.cloudbus.cloudsim.gpu.VgpuScheduler;
 import org.cloudbus.cloudsim.gpu.VideoCard;
+import org.cloudbus.cloudsim.gpu.VideoCardTags;
 import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicy;
 import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicySimple;
-import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVideoCardPowerModelK1;
-import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVideoCardTags;
-import org.cloudbus.cloudsim.gpu.performance.models.PerformanceModel;
-import org.cloudbus.cloudsim.gpu.performance.models.PerformanceModelGpuConstant;
+import org.cloudbus.cloudsim.gpu.performance.models.PerformanceModelGpuNull;
 import org.cloudbus.cloudsim.gpu.placement.GpuDatacenterBrokerEx;
 import org.cloudbus.cloudsim.gpu.power.PowerGpuDatacenter;
 import org.cloudbus.cloudsim.gpu.power.PowerGpuHost;
 import org.cloudbus.cloudsim.gpu.power.PowerVideoCard;
+import org.cloudbus.cloudsim.gpu.power.PowerVideoCardTags;
 import org.cloudbus.cloudsim.gpu.power.models.GpuHostPowerModelLinear;
 import org.cloudbus.cloudsim.gpu.power.models.VideoCardPowerModel;
 import org.cloudbus.cloudsim.gpu.provisioners.GpuBwProvisionerShared;
 import org.cloudbus.cloudsim.gpu.provisioners.GpuGddramProvisionerSimple;
+import org.cloudbus.cloudsim.gpu.provisioners.GpuPeProvisionerSimple;
 import org.cloudbus.cloudsim.gpu.provisioners.VideoCardBwProvisioner;
 import org.cloudbus.cloudsim.gpu.provisioners.VideoCardBwProvisionerShared;
 import org.cloudbus.cloudsim.gpu.remote.RemoteGpuDatacenterEx;
 import org.cloudbus.cloudsim.gpu.remote.RemoteGpuTask;
 import org.cloudbus.cloudsim.gpu.remote.RemoteGpuVmAllocationPolicySimple;
+import org.cloudbus.cloudsim.gpu.remote.RemoteVgpu;
 import org.cloudbus.cloudsim.gpu.remote.RemoteVgpuSchedulerFairShareEx;
 import org.cloudbus.cloudsim.gpu.remote.RemoteVgpuTags;
+import org.cloudbus.cloudsim.gpu.remote.RemoteVgpuTags.Tenancy;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicy;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicySimple;
 import org.cloudbus.cloudsim.lists.VmList;
@@ -62,12 +61,18 @@ import org.cloudbus.cloudsim.provisioners.RamProvisionerSimple;
 import de.vandermeer.asciitable.AsciiTable;
 
 /**
- * This example demonstrates the use of gpu package for the simulation of remote
- * GPU virtualization. <br>
- * GPU virtualization mode: GPU remoting <br>
- * Performance Model: on <br>
- * Interference Model: off <br>
- * Power Model: on
+ * Example 6, GPU remoting. With API remoting, a VM can use a GPU of another host
+ * over the network. The tenancy of a {@link RemoteVgpu} tells whether it must be
+ * on the host of its VM (local) or may be on any host (remote), and whether it
+ * shares its pGPU (shared) or not (exclusive); see {@link Tenancy}. <br>
+ * Host 0 has no GPU and host 1 has an NVIDIA A16. VM 0 has a remote exclusive
+ * vGPU: the VM goes to host 0 and its vGPU to a pGPU of host 1. VM 1 has a
+ * local exclusive vGPU, so both go to host 1; its vGPU takes a second pGPU
+ * because the first one holds the exclusive vGPU of VM 0. Both VMs run the same
+ * cloudlet, but the cloudlet of VM 0 takes longer because a remote GPU task
+ * pays a communication overhead (10% here). VMs that arrive within a placement window
+ * are placed together, which lets placement policies consider them at once. <br>
+ * New: remote vGPUs, tenancy, communication overhead and placement windows.
  * 
  * @author Ahmad Siavashi
  * 
@@ -79,10 +84,10 @@ public class CloudSimGpuExample6 {
 	private static List<GpuVm> vmlist;
 	/** The datacenter list. */
 	private static List<PowerGpuDatacenter> datacenterList;
-	/** number of VMs. */
-	private static int numVms = 1;
-	/** number of gpu-cloudlets */
-	private static int numGpuCloudlets = 1;
+	/** tenancy of the vGPU of each VM */
+	private static Tenancy[] vgpuTenancies = { Tenancy.REMOTE_EXCLUSIVE, Tenancy.LOCAL_EXCLUSIVE };
+	/** time (seconds) between two VM placements */
+	private static double placementWindow = 60;
 	/**
 	 * The resolution in which progress in evaluated.
 	 */
@@ -107,7 +112,7 @@ public class CloudSimGpuExample6 {
 			CloudSim.init(num_user, calendar, trace_flag);
 
 			// Create a list to hold created datacenters
-			datacenterList = new ArrayList<>();
+			datacenterList = new ArrayList<PowerGpuDatacenter>();
 			// Create one Datacenter
 			PowerGpuDatacenter datacenter = createDatacenter("Datacenter");
 			// add the datacenter to the datacenterList
@@ -122,30 +127,15 @@ public class CloudSimGpuExample6 {
 			// Create a list to hold issued Cloudlets
 			cloudletList = new ArrayList<GpuCloudlet>();
 
-			// Create VMs
-			for (int i = 0; i < numVms; i++) {
+			// Create VMs and their cloudlets
+			for (int i = 0; i < vgpuTenancies.length; i++) {
 				int vmId = i;
 				int vgpuId = i;
-				// Create a VM
-				GpuVm vm = createGpuVm(vmId, vgpuId, brokerId);
-				// add the VM to the vmList
+				GpuVm vm = createGpuVm(vmId, vgpuId, vgpuTenancies[i], brokerId);
 				vmlist.add(vm);
-			}
-
-			// Create GpuCloudlets
-			for (int i = 0; i < numGpuCloudlets; i++) {
-				int gpuCloudletId = i;
-				int gpuTaskId = i;
-				// Create Cloudlet
-				GpuCloudlet cloudlet = createGpuCloudlet(gpuCloudletId, gpuTaskId, brokerId);
-				// add the cloudlet to the list
+				GpuCloudlet cloudlet = createGpuCloudlet(i, i, brokerId);
+				cloudlet.setVmId(vmId);
 				cloudletList.add(cloudlet);
-			}
-
-			// Cloudlet-VM assignment
-			for (int i = 0; i < numGpuCloudlets; i++) {
-				GpuCloudlet cloudlet = cloudletList.get(i);
-				cloudlet.setVmId(i % numVms);
 			}
 
 			// submit vm list to the broker
@@ -165,6 +155,7 @@ public class CloudSimGpuExample6 {
 			// Print results when simulation is over
 			List<Cloudlet> newList = broker.getCloudletReceivedList();
 			printCloudletList(newList);
+			printEnergy();
 
 			Log.printLine("CloudSimGpuExample6 finished!");
 		} catch (Exception e) {
@@ -175,10 +166,15 @@ public class CloudSimGpuExample6 {
 
 	/**
 	 * Create a GpuCloudlet.
+	 * 
+	 * @param gpuCloudletId gpuCloudlet id
+	 * @param gpuTaskId     gpuCloudlet's gpuTask id
+	 * @param brokerId      the broker to which the gpuCloudlet belongs
+	 * @return the gpuCloudlet
 	 */
 	private static GpuCloudlet createGpuCloudlet(int gpuCloudletId, int gpuTaskId, int brokerId) {
-		// Cloudlet properties
-		long length = (long) (400 * GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_PE_MIPS);
+		// Cloudlet properties; 100 seconds on a CPU core
+		long length = (long) (100 * GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_PE_MIPS);
 		long fileSize = 300;
 		long outputSize = 300;
 		int pesNumber = 1;
@@ -186,18 +182,21 @@ public class CloudSimGpuExample6 {
 		UtilizationModel ramUtilizationModel = new UtilizationModelFull();
 		UtilizationModel bwUtilizationModel = new UtilizationModelFull();
 
-		// GpuTask properties
-		long taskLength = (long) (GridVideoCardTags.NVIDIA_K1_CARD_PE_MIPS * 150);
-		long taskInputSize = 128;
-		long taskOutputSize = 128;
+		// GpuTask properties; one block per SM, each 300 seconds on an SM
+		long taskLength = (long) (VideoCardTags.NVIDIA_A16_CARD_PE_MIPS * 300);
+		long taskInputSize = 1024;
+		long taskOutputSize = 1024;
 		long requestedGddramSize = 4 * 1024;
-		int numberOfBlocks = 2;
+		int numberOfBlocks = VideoCardTags.NVIDIA_A16_CARD_GPU_PES;
+		// Communication overhead (%) when the gpuTask runs on a remote GPU
+		float communicationOverhead = 10;
 		UtilizationModel gpuUtilizationModel = new UtilizationModelFull();
 		UtilizationModel gddramUtilizationModel = new UtilizationModelFull();
 		UtilizationModel gddramBwUtilizationModel = new UtilizationModelFull();
 
 		GpuTask gpuTask = new RemoteGpuTask(gpuTaskId, taskLength, numberOfBlocks, taskInputSize, taskOutputSize,
-				requestedGddramSize, 1.5f, gpuUtilizationModel, gddramUtilizationModel, gddramBwUtilizationModel);
+				requestedGddramSize, communicationOverhead, gpuUtilizationModel, gddramUtilizationModel,
+				gddramBwUtilizationModel);
 
 		GpuCloudlet gpuCloudlet = new GpuCloudlet(gpuCloudletId, length, pesNumber, fileSize, outputSize,
 				cpuUtilizationModel, ramUtilizationModel, bwUtilizationModel, gpuTask, false);
@@ -208,17 +207,24 @@ public class CloudSimGpuExample6 {
 
 	/**
 	 * Create a VM.
+	 * 
+	 * @param vmId       vm id
+	 * @param vgpuId     vm's vgpu id
+	 * @param tenancy    tenancy of the vgpu
+	 * @param brokerId   the broker to which this vm belongs
+	 * @return the GpuVm
 	 */
-	private static GpuVm createGpuVm(int vmId, int vgpuId, int brokerId) {
+	private static GpuVm createGpuVm(int vmId, int vgpuId, Tenancy tenancy, int brokerId) {
 		// VM description
-		double mips = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_PE_MIPS;
-		// image size (GB)
-		int size = 10;
-		// vm memory (GB)
-		int ram = 2;
-		long bw = 100;
+		double mips = GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_PE_MIPS;
+		// image size (MB)
+		int size = 100 * 1024;
+		// vm memory (MB)
+		int ram = 64 * 1024;
+		// 1 Gbit/s in MB/s
+		long bw = 125;
 		// number of cpus
-		int pesNumber = 4;
+		int pesNumber = 16;
 		// VMM name
 		String vmm = "Xen";
 
@@ -227,13 +233,10 @@ public class CloudSimGpuExample6 {
 				new GpuCloudletSchedulerTimeShared());
 		// Create GpuTask Scheduler
 		GpuTaskSchedulerLeftover gpuTaskScheduler = new GpuTaskSchedulerLeftover();
-		// Create a Vgpu
-		final String vgpuType = "Elastic Graphics";
-		final String vgpuTenancy = RemoteVgpuTags.REMOTE_SHARED;
-		// GDDRAM: 256 MB
-		final int vgpuGddram = 4096;
-		Vgpu vgpu = new Vgpu(vgpuId, 0, 0, vgpuGddram, 0, vgpuType, vgpuTenancy, gpuTaskScheduler,
-				BusTags.PCI_E_3_X16_BW);
+		// Create an 8 GB remote vGPU; its scheduler gives it the SMs of its pGPU
+		final int vgpuGddram = 8 * 1024;
+		Vgpu vgpu = new RemoteVgpu(vgpuId, 0, 0, vgpuGddram, 0, "Elastic Graphics", tenancy, gpuTaskScheduler,
+				BusTags.PCI_E_4_X16_BW);
 		vm.setVgpu(vgpu);
 		return vm;
 	}
@@ -245,103 +248,13 @@ public class CloudSimGpuExample6 {
 	 * 
 	 * @return the datacenter
 	 */
-	private static RemoteGpuDatacenterEx createDatacenter(String name) {
+	private static PowerGpuDatacenter createDatacenter(String name) {
 		// We need to create a list to store our machine
-		List<GpuHost> hostList = new ArrayList<>();
+		List<GpuHost> hostList = new ArrayList<GpuHost>();
 
-		/** Create 2 hosts, one is GPU-equipped */
-
-		/** A host with GPU **/
-
-		// Number of host's video cards
-		int numVideoCards = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_NUM_VIDEO_CARDS;
-		// To hold video cards
-		List<VideoCard> videoCards = new ArrayList<VideoCard>(numVideoCards);
-		for (int videoCardId = 0; videoCardId < numVideoCards; videoCardId++) {
-			List<Pgpu> pgpus = new ArrayList<>();
-			// Adding an NVIDIA K1 Card
-			double mips = GridVideoCardTags.NVIDIA_K1_CARD_PE_MIPS;
-			int gddram = GridVideoCardTags.NVIDIA_K1_CARD_GPU_MEM;
-			long bw = GridVideoCardTags.NVIDIA_K1_CARD_BW_PER_BUS;
-			for (int pgpuId = 0; pgpuId < GridVideoCardTags.NVIDIA_K1_CARD_GPUS; pgpuId++) {
-				List<Pe> pes = new ArrayList<Pe>();
-				for (int peId = 0; peId < GridVideoCardTags.NVIDIA_K1_CARD_GPU_PES; peId++) {
-					pes.add(new Pe(peId, new PeProvisionerSimple(mips)));
-				}
-				pgpus.add(new Pgpu(pgpuId, GridVideoCardTags.NVIDIA_K1_GPU_TYPE, pes,
-						new GpuGddramProvisionerSimple(gddram), new GpuBwProvisionerShared(bw)));
-			}
-			// Pgpu selection policy
-			PgpuSelectionPolicy pgpuSelectionPolicy = new PgpuSelectionPolicySimple();
-			// Performance Model
-			double performanceLoss = 0.1;
-			PerformanceModel<VgpuScheduler, Vgpu> performanceModel = new PerformanceModelGpuConstant(performanceLoss);
-			// Scheduler
-			RemoteVgpuSchedulerFairShareEx vgpuScheduler = new RemoteVgpuSchedulerFairShareEx(
-					GridVideoCardTags.NVIDIA_K1_CARD, pgpus, pgpuSelectionPolicy, performanceModel);
-			// PCI Express Bus Bw Provisioner
-			VideoCardBwProvisioner videoCardBwProvisioner = new VideoCardBwProvisionerShared(BusTags.PCI_E_3_X16_BW);
-			// Video Card Power Model
-			VideoCardPowerModel videoCardPowerModel = new GridVideoCardPowerModelK1(false);
-			// Create a video card
-			PowerVideoCard videoCard = new PowerVideoCard(videoCardId, GridVideoCardTags.NVIDIA_K1_CARD, vgpuScheduler,
-					videoCardBwProvisioner, videoCardPowerModel);
-			videoCards.add(videoCard);
-		}
-
-		// Create a host
-		int hostId = 0;
-
-		// A Machine contains one or more PEs or CPUs/Cores.
-		List<Pe> peList = new ArrayList<Pe>();
-
-		// PE's MIPS power
-		double mips = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_PE_MIPS;
-
-		for (int peId = 0; peId < GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_NUM_PES; peId++) {
-			// Create PEs and add these into a list.
-			peList.add(new Pe(peId, new PeProvisionerSimple(mips)));
-		}
-
-		// Create Host with its id and list of PEs and add them to the list of machines
-		// host memory (MB)
-		int ram = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_RAM;
-		// host storage
-		long storage = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_STORAGE;
-		// host BW
-		int bw = GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3_BW;
-		// Set VM Scheduler
-		VmScheduler vmScheduler = new VmSchedulerTimeShared(peList);
-		// Host Power Model
-		double hostMaxPower = 200;
-		double hostStaticPowerPercent = 0.70;
-		PowerModel powerModel = new GpuHostPowerModelLinear(hostMaxPower, hostStaticPowerPercent);
-		// Video Card Selection Policy
-		VideoCardAllocationPolicy videoCardAllocationPolicy = new VideoCardAllocationPolicySimple(videoCards);
-
-		PowerGpuHost newHost = new PowerGpuHost(hostId, GpuHostTags.DUAL_INTEL_XEON_E5_2620_V3,
-				new RamProvisionerSimple(ram), new BwProvisionerSimple(bw), storage, peList, vmScheduler,
-				videoCardAllocationPolicy, powerModel);
-
-		hostList.add(newHost);
-
-		/** A host without GPU **/
-
-		// A Machine contains one or more PEs or CPUs/Cores.
-		peList = new ArrayList<Pe>();
-
-		for (int peId = 0; peId < GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4_NUM_PES; peId++) {
-			// Create PEs and add these into a list.
-			peList.add(new Pe(peId, new PeProvisionerSimple(GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4_PE_MIPS)));
-		}
-		powerModel = new GpuHostPowerModelLinear(hostMaxPower, hostStaticPowerPercent);
-		newHost = new PowerGpuHost(hostId + 1, GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4,
-				new RamProvisionerSimple(GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4_RAM),
-				new BwProvisionerSimple(GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4_BW),
-				GpuHostTags.DUAL_INTEL_XEON_E5_2690_V4_STORAGE, peList, new VmSchedulerTimeShared(peList), null,
-				powerModel);
-
-		hostList.add(newHost);
+		/* Create 2 hosts, the second one is GPU-equipped */
+		hostList.add(createHost(0, null));
+		hostList.add(createHost(1, createA16VideoCards()));
 
 		// Create a DatacenterCharacteristics object that stores the
 		// properties of a data center: architecture, OS, list of
@@ -352,7 +265,7 @@ public class CloudSimGpuExample6 {
 		// operating system
 		String os = "Linux";
 		// VM Manager
-		String vmm = "Horizen";
+		String vmm = "Xen";
 		// time zone this resource located (Tehran)
 		double time_zone = +3.5;
 		// the cost of using processing in this resource
@@ -370,15 +283,85 @@ public class CloudSimGpuExample6 {
 				cost, costPerMem, costPerStorage, costPerBw);
 
 		// We need to create a Datacenter object.
-		RemoteGpuDatacenterEx datacenter = null;
+		PowerGpuDatacenter datacenter = null;
 		try {
-			datacenter = new RemoteGpuDatacenterEx(name, characteristics, new RemoteGpuVmAllocationPolicySimple(hostList),
-					storageList, schedulingInterval, 60);
+			datacenter = new RemoteGpuDatacenterEx(name, characteristics,
+					new RemoteGpuVmAllocationPolicySimple(hostList), storageList, schedulingInterval, placementWindow);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 
 		return datacenter;
+	}
+
+	/**
+	 * Create the video cards of a host with an NVIDIA A16.
+	 * 
+	 * @return the video cards
+	 */
+	private static List<VideoCard> createA16VideoCards() {
+		// Number of host's video cards
+		int numVideoCards = GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_A16_NUM_VIDEO_CARDS;
+		// To hold video cards
+		List<VideoCard> videoCards = new ArrayList<VideoCard>(numVideoCards);
+		for (int videoCardId = 0; videoCardId < numVideoCards; videoCardId++) {
+			List<Pgpu> pgpus = new ArrayList<Pgpu>();
+			// Adding an NVIDIA A16 Card
+			double mips = VideoCardTags.NVIDIA_A16_CARD_PE_MIPS;
+			int gddram = VideoCardTags.NVIDIA_A16_CARD_GPU_MEM;
+			long bw = VideoCardTags.NVIDIA_A16_CARD_BW_PER_BUS;
+			for (int pgpuId = 0; pgpuId < VideoCardTags.NVIDIA_A16_CARD_GPUS; pgpuId++) {
+				List<Pe> pes = new ArrayList<Pe>();
+				for (int peId = 0; peId < VideoCardTags.NVIDIA_A16_CARD_GPU_PES; peId++) {
+					pes.add(new Pe(peId, new GpuPeProvisionerSimple(mips)));
+				}
+				pgpus.add(new Pgpu(pgpuId, VideoCardTags.NVIDIA_A16_GPU_TYPE, pes,
+						new GpuGddramProvisionerSimple(gddram), new GpuBwProvisionerShared(bw)));
+			}
+			// Pgpu selection policy
+			PgpuSelectionPolicy pgpuSelectionPolicy = new PgpuSelectionPolicySimple();
+			// Scheduler; applies the tenancy of remote vGPUs
+			RemoteVgpuSchedulerFairShareEx vgpuScheduler = new RemoteVgpuSchedulerFairShareEx(
+					VideoCardTags.NVIDIA_A16_CARD, pgpus, pgpuSelectionPolicy, new PerformanceModelGpuNull());
+			// PCI Express Bus Bw Provisioner
+			VideoCardBwProvisioner videoCardBwProvisioner = new VideoCardBwProvisionerShared(BusTags.PCI_E_4_X16_BW);
+			// Video Card Power Model; idle pGPUs are not power-gated
+			VideoCardPowerModel videoCardPowerModel = PowerVideoCardTags.getA16PowerModel(false);
+			// Create a video card
+			PowerVideoCard videoCard = new PowerVideoCard(videoCardId, VideoCardTags.NVIDIA_A16_CARD, vgpuScheduler,
+					videoCardBwProvisioner, videoCardPowerModel);
+			videoCards.add(videoCard);
+		}
+		return videoCards;
+	}
+
+	/**
+	 * Create a dual Intel Xeon Platinum 8380 host.
+	 * 
+	 * @param hostId     the host id
+	 * @param videoCards the video cards of the host, or null for none
+	 * @return the host
+	 */
+	private static PowerGpuHost createHost(int hostId, List<VideoCard> videoCards) {
+		// A Machine contains one or more PEs or CPUs/Cores.
+		List<Pe> peList = new ArrayList<Pe>();
+		for (int peId = 0; peId < GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_NUM_PES; peId++) {
+			// Create PEs and add these into a list.
+			peList.add(new Pe(peId, new PeProvisionerSimple(GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_PE_MIPS)));
+		}
+		// Host Power Model; the video cards have their own power models
+		PowerModel powerModel = new GpuHostPowerModelLinear(GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_MAX_POWER,
+				GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_STATIC_POWER_PERCENT);
+		// Video Card Selection Policy
+		VideoCardAllocationPolicy videoCardAllocationPolicy = videoCards == null ? null
+				: new VideoCardAllocationPolicySimple(videoCards);
+		return new PowerGpuHost(hostId,
+				videoCards == null ? GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380
+						: GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_A16,
+				new RamProvisionerSimple(GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_RAM),
+				new BwProvisionerSimple(GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_BW),
+				GpuHostTags.DUAL_INTEL_XEON_PLATINUM_8380_STORAGE, peList, new VmSchedulerTimeShared(peList),
+				videoCardAllocationPolicy, powerModel);
 	}
 
 	/**
@@ -400,72 +383,55 @@ public class CloudSimGpuExample6 {
 	}
 
 	/**
-	 * Prints the GpuCloudlet objects.
+	 * Prints the GpuCloudlets.
 	 * 
 	 * @param list list of GpuCloudlets
 	 */
 	private static void printCloudletList(List<Cloudlet> gpuCloudlets) {
-		Log.printLine(String.join("", Collections.nCopies(100, "-")));
 		DecimalFormat dft = new DecimalFormat("###.##");
+		AsciiTable at = new AsciiTable();
+		at.addRule();
+		at.addRow("Cloudlet ID", "VM ID", "vGPU Tenancy", "GPU Time", "Start Time", "Finish Time");
+		at.addRule();
 		for (GpuCloudlet gpuCloudlet : (List<GpuCloudlet>) (List<?>) gpuCloudlets) {
-			// Cloudlet
-			AsciiTable at = new AsciiTable();
-			at.addRule();
-			at.addRow("Cloudlet ID", "Status", "Datacenter ID", "VM ID", "Time", "Start Time", "Finish Time");
-			at.addRule();
-			if (gpuCloudlet.getStatus() == Cloudlet.CloudletStatus.SUCCESS) {
-				at.addRow(gpuCloudlet.getCloudletId(), "SUCCESS", gpuCloudlet.getResourceId(), gpuCloudlet.getVmId(),
-						dft.format(gpuCloudlet.getActualCPUTime()).toString(),
-						dft.format(gpuCloudlet.getExecStartTime()).toString(),
-						dft.format(gpuCloudlet.getFinishTime()).toString());
-				at.addRule();
-			}
+			GpuVm vm = (GpuVm) VmList.getById(vmlist, gpuCloudlet.getVmId());
 			GpuTask gpuTask = gpuCloudlet.getGpuTask();
-			// Gpu Task
-			at.addRow("Task ID", "Cloudlet ID", "Status", "vGPU Profile", "Time", "Start Time", "Finish Time");
+			at.addRow(gpuCloudlet.getCloudletId(), vm.getId(), RemoteVgpuTags.getTenancy(vm.getVgpu()),
+					gpuTask == null ? "-" : dft.format(gpuTask.getActualGPUTime()),
+					dft.format(gpuCloudlet.getExecStartTime()), dft.format(gpuCloudlet.getFinishTime()));
 			at.addRule();
-			if (gpuTask.getTaskStatus() == GpuTask.SUCCESS) {
-				at.addRow(gpuTask.getTaskId(), gpuTask.getCloudlet().getCloudletId(), "SUCCESS",
-						((GpuVm) VmList.getById(vmlist, gpuTask.getCloudlet().getVmId())).getVgpu().getType(),
-						dft.format(gpuTask.getActualGPUTime()).toString(),
-						dft.format(gpuTask.getExecStartTime()).toString(),
-						dft.format(gpuTask.getFinishTime()).toString());
-				at.addRule();
-			}
-			at.getContext().setWidth(100);
-			Log.printLine(at.render());
-			Log.printLine(String.join("", Collections.nCopies(100, "-")));
-
 		}
+		Log.printLine(at.render());
+	}
 
+	/**
+	 * Prints the energy consumed by datacenters, hosts and video cards.
+	 */
+	private static void printEnergy() {
+		DecimalFormat dft = new DecimalFormat("###.##");
 		AsciiTable at = new AsciiTable();
 		at.addRule();
 		at.addRow("Entity", "Energy Consumed (Joules)");
 		at.addRule();
 		for (PowerGpuDatacenter datacenter : datacenterList) {
-			String depth = "#" + datacenter.getId();
-			at.addRow("Datacenter " + depth, dft.format(datacenter.getConsumedEnergy()).toString());
+			at.addRow("Datacenter #" + datacenter.getId(), dft.format(datacenter.getConsumedEnergy()));
 			at.addRule();
 			for (Entry<PowerGpuHost, Double> entry : datacenter.getHostEnergyMap().entrySet()) {
 				PowerGpuHost host = entry.getKey();
-				depth = "#" + host.getId() + " / " + depth;
-				at.addRow("Host " + depth, dft.format(datacenter.getHostCpuEnergyMap().get(host)).toString() + " / "
-						+ dft.format(datacenter.getHostEnergyMap().get(host)).toString());
+				at.addRow("Host #" + host.getId() + " (CPUs / whole host)",
+						dft.format(datacenter.getHostCpuEnergyMap().get(host)) + " / "
+								+ dft.format(datacenter.getHostEnergyMap().get(host)));
 				at.addRule();
 				if (host.isGpuEquipped()) {
 					for (PowerVideoCard videoCard : (List<PowerVideoCard>) host.getVideoCardAllocationPolicy()
 							.getVideoCards()) {
-						depth = "#" + videoCard.getId() + " / " + depth;
-						at.addRow("Video Card " + depth,
-								dft.format(datacenter.getHostVideoCardEnergyMap().get(host).get(videoCard)).toString()
-										+ " / " + dft.format(datacenter.getHostEnergyMap().get(host)).toString());
+						at.addRow("Video Card #" + videoCard.getId() + " of Host #" + host.getId(),
+								dft.format(datacenter.getHostVideoCardEnergyMap().get(host).get(videoCard)));
 						at.addRule();
 					}
 				}
-				depth = "#" + datacenter.getId();
 			}
 		}
-		at.getContext().setWidth(100);
 		Log.printLine(at.render());
 	}
 }
