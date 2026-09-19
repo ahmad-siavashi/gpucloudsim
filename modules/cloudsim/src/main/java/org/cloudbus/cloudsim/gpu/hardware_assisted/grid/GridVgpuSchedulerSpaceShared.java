@@ -1,48 +1,53 @@
 package org.cloudbus.cloudsim.gpu.hardware_assisted.grid;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.cloudbus.cloudsim.gpu.Pgpu;
 import org.cloudbus.cloudsim.gpu.Vgpu;
 import org.cloudbus.cloudsim.gpu.VgpuScheduler;
+import org.cloudbus.cloudsim.gpu.VideoCardTags;
 import org.cloudbus.cloudsim.gpu.performance.PerformanceVgpuSchedulerSpaceShared;
 import org.cloudbus.cloudsim.gpu.performance.models.PerformanceModel;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicy;
 
 /**
- * A space-shared vGPU Scheduler that considers GRID restrictions.
+ * A space-shared vGPU Scheduler that places vGPUs by {@link GridVgpuPlacement}.
  * 
  * @author Ahmad Siavashi
  */
 public class GridVgpuSchedulerSpaceShared extends PerformanceVgpuSchedulerSpaceShared {
 
-	protected final String[] profiles;
-	protected Map<Pgpu, String> allocationMap;
+	protected final GridVgpuPlacement placement;
 
+	/**
+	 * @param videoCardType the video card type (see {@link VideoCardTags})
+	 * @param mixedSize     whether the GPUs are in mixed-size mode
+	 */
 	public GridVgpuSchedulerSpaceShared(String videoCardType, List<Pgpu> pgpuList,
 			PgpuSelectionPolicy pgpuSelectionPolicy, PerformanceModel<VgpuScheduler, Vgpu> performanceModel,
-			String[] profiles) {
+			boolean mixedSize) {
 		super(videoCardType, pgpuList, pgpuSelectionPolicy, performanceModel);
-		this.allocationMap = new HashMap<>();
-		this.profiles = profiles;
+		this.placement = new GridVgpuPlacement(videoCardType, pgpuList, mixedSize);
+	}
+
+	/**
+	 * Instantiates a new space-shared vgpu scheduler whose GPUs are in equal-size mode,
+	 * which is the default of NVIDIA vGPU software.
+	 */
+	public GridVgpuSchedulerSpaceShared(String videoCardType, List<Pgpu> pgpuList,
+			PgpuSelectionPolicy pgpuSelectionPolicy, PerformanceModel<VgpuScheduler, Vgpu> performanceModel) {
+		this(videoCardType, pgpuList, pgpuSelectionPolicy, performanceModel, false);
 	}
 
 	@Override
 	public boolean isSuitable(Pgpu pgpu, Vgpu vgpu) {
-		if ((this.allocationMap.getOrDefault(pgpu, null) == null || this.allocationMap.get(pgpu).equals(vgpu.getType()))
-				&& ArrayUtils.contains(this.profiles, vgpu.getType())) {
-			return super.isSuitable(pgpu, vgpu);
-		}
-		return false;
+		return placement.isSuitable(pgpu, vgpu) && super.isSuitable(pgpu, vgpu);
 	}
 
 	@Override
 	public boolean allocatePgpuForVgpu(Pgpu pgpu, Vgpu vgpu, List<Double> mipsShare, int gddramShare, long bwShare) {
 		if (super.allocatePgpuForVgpu(pgpu, vgpu, mipsShare, gddramShare, bwShare)) {
-			this.allocationMap.put(pgpu, vgpu.getType());
+			placement.place(pgpu, vgpu);
 			return true;
 		}
 		return false;
@@ -50,11 +55,12 @@ public class GridVgpuSchedulerSpaceShared extends PerformanceVgpuSchedulerSpaceS
 
 	@Override
 	public void deallocatePgpuForVgpu(Vgpu vgpu) {
-		Pgpu pgpu = getPgpuForVgpu(vgpu);
-		if (getPgpuVgpuMap().get(pgpu).size() == 1) {
-			this.allocationMap.remove(pgpu);
-		}
+		placement.remove(getPgpuForVgpu(vgpu), vgpu);
 		super.deallocatePgpuForVgpu(vgpu);
+	}
+
+	public GridVgpuPlacement getPlacement() {
+		return placement;
 	}
 
 }
