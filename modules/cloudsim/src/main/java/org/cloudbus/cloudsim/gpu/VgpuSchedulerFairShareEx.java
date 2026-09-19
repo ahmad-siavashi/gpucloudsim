@@ -22,6 +22,16 @@ public class VgpuSchedulerFairShareEx extends VgpuSchedulerFairShare {
 		// TODO Auto-generated constructor stub
 	}
 
+	/**
+	 * The PEs and MIPS that the vgpu requests are ignored, so only the memory and
+	 * the bandwidth of the pgpu limit its vgpus.
+	 */
+	@Override
+	public boolean isSuitable(Pgpu pgpu, Vgpu vgpu) {
+		return pgpu.getGddramProvisioner().isSuitableForVgpu(vgpu, vgpu.getCurrentRequestedGddram())
+				&& pgpu.getBwProvisioner().isSuitableForVgpu(vgpu, vgpu.getCurrentRequestedBw());
+	}
+
 	@Override
 	public boolean allocatePgpuForVgpu(Pgpu pgpu, Vgpu vgpu, List<Double> mipsShare, int gddramShare, long bwShare) {
 		if (!isSuitable(pgpu, vgpu)) {

@@ -39,29 +39,12 @@ public class PerformanceGpuHost extends GpuHost {
 	}
 
 	@Override
-	public double updateVgpusProcessing(double currentTime) {
-		double smallerTime = Double.MAX_VALUE;
-
-		if (isGpuEquipped()) {
-			List<Vgpu> runningVgpus = new ArrayList<Vgpu>();
-			for (Vgpu vgpu : getVideoCardAllocationPolicy().getVgpuVideoCardMap().keySet()) {
-				if (vgpu.getGpuTaskScheduler().runningTasks() > 0) {
-					runningVgpus.add(vgpu);
-				}
-			}
-			for (Vgpu vgpu : getVideoCardAllocationPolicy().getVgpuVideoCardMap().keySet()) {
-				@SuppressWarnings("unchecked")
-				PerformanceScheduler<Vgpu> vgpuScheduler = (PerformanceScheduler<Vgpu>) getVideoCardAllocationPolicy()
-						.getVgpuVideoCardMap().get(vgpu).getVgpuScheduler();
-				double time = vgpu.updateGpuTaskProcessing(currentTime,
-						vgpuScheduler.getAvailableMips(vgpu, runningVgpus));
-				if (time > 0.0 && time < smallerTime) {
-					smallerTime = time;
-				}
-			}
-		}
-
-		return smallerTime;
+	protected List<Double> getVgpuMips(Vgpu vgpu, List<Vgpu> runningVgpus) {
+		@SuppressWarnings("unchecked")
+		PerformanceScheduler<Vgpu> vgpuScheduler = (PerformanceScheduler<Vgpu>) getVideoCardAllocationPolicy()
+				.getVgpuVideoCardMap().get(vgpu).getVgpuScheduler();
+		// performance models may modify the list
+		return vgpuScheduler.getAvailableMips(vgpu, new ArrayList<Vgpu>(runningVgpus));
 	}
 
 }

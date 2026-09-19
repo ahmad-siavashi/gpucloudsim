@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.cloudbus.cloudsim.Pe;
+import org.cloudbus.cloudsim.gpu.provisioners.GpuPeProvisionerSimple;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicy;
 import org.cloudbus.cloudsim.lists.PeList;
 import org.cloudbus.cloudsim.util.MathUtil;
@@ -40,6 +41,19 @@ public class VgpuSchedulerFairShare extends VgpuSchedulerTimeShared {
 		setRequestedMipsMap(new HashMap<Vgpu, List<Double>>());
 	}
 
+	/**
+	 * MIPS are over-subscribed, so only the memory and the bandwidth of the pgpu
+	 * limit its vgpus.
+	 */
+	@Override
+	public boolean isSuitable(Pgpu pgpu, Vgpu vgpu) {
+		if (pgpu.getPeList().size() < vgpu.getCurrentRequestedMips().size()) {
+			return false;
+		}
+		return pgpu.getGddramProvisioner().isSuitableForVgpu(vgpu, vgpu.getCurrentRequestedGddram())
+				&& pgpu.getBwProvisioner().isSuitableForVgpu(vgpu, vgpu.getCurrentRequestedBw());
+	}
+
 	@Override
 	public boolean allocatePgpuForVgpu(Pgpu pgpu, Vgpu vgpu, List<Double> mipsShare, int gddramShare, long bwShare) {
 		if (!isSuitable(pgpu, vgpu)) {
@@ -64,20 +78,20 @@ public class VgpuSchedulerFairShare extends VgpuSchedulerTimeShared {
 	 *                   either added or removed.
 	 */
 	protected void redistributeMipsDueToOverSubscription(final Pgpu pgpu, double mipsChange) {
-		// calculating the scaling factor
-		final double totalPgpuMips = PeList.getTotalMips(pgpu.getPeList());
-		double pgpuAvailableMips = 0.0;
-		for (Pe pe : pgpu.getPeList()) {
-			pgpuAvailableMips += pe.getPeProvisioner().getAvailableMips();
-		}
-		final double totalRequestedMipsFromPgpu = mipsChange + (totalPgpuMips - pgpuAvailableMips);
-		final double scaleFactor = totalPgpuMips / totalRequestedMipsFromPgpu;
 		// find vgpus running on the selected pgpu
 		List<Vgpu> pgpuVgpus = getPgpuVgpuMap().get(pgpu);
+		// calculating the scaling factor from the requested mips of the vgpus; their
+		// allocated mips are already scaled
+		final double totalPgpuMips = PeList.getTotalMips(pgpu.getPeList());
+		double totalRequestedMipsFromPgpu = 0.0;
+		for (Vgpu vgpu : pgpuVgpus) {
+			totalRequestedMipsFromPgpu += MathUtil.sum(getRequestedMipsMap().get(vgpu));
+		}
+		final double scaleFactor = totalPgpuMips / totalRequestedMipsFromPgpu;
 		// deallocate
 		for (Vgpu vgpu : pgpuVgpus) {
 			for (Pe pe : getVgpuPeMap().get(vgpu)) {
-				pe.getPeProvisioner().deallocateMipsForVm(vgpu.getVm());
+				((GpuPeProvisionerSimple) pe.getPeProvisioner()).deallocateMipsForGuest(vgpu.getUid());
 			}
 		}
 		for (Vgpu vgpu : pgpuVgpus) {
@@ -88,13 +102,12 @@ public class VgpuSchedulerFairShare extends VgpuSchedulerTimeShared {
 			}
 			double totalScaledMipsForVm = MathUtil.sum(scaledVmMips);
 			double totalRequestedMipsForVm = MathUtil.sum(getRequestedMipsMap().get(vgpu));
-			if (totalScaledMipsForVm < totalRequestedMipsForVm) {
-				getMipsMap().put(vgpu, scaledVmMips);
-				vgpu.setCurrentAllocatedMips(scaledVmMips);
-			} else {
-				getMipsMap().put(vgpu, getRequestedMipsMap().get(vgpu));
-				vgpu.setCurrentAllocatedMips(getRequestedMipsMap().get(vgpu));
+			// a vgpu never gets more than it requests
+			if (totalScaledMipsForVm >= totalRequestedMipsForVm) {
+				scaledVmMips = getRequestedMipsMap().get(vgpu);
 			}
+			getMipsMap().put(vgpu, scaledVmMips);
+			vgpu.setCurrentAllocatedMips(scaledVmMips);
 			// reallocate
 			Collections.sort(pgpu.getPeList(), Collections.reverseOrder(new Comparator<Pe>() {
 				public int compare(Pe pe1, Pe pe2) {
@@ -106,7 +119,7 @@ public class VgpuSchedulerFairShare extends VgpuSchedulerTimeShared {
 			// No two Vgpu PEs are mapped to one Pgpu PE
 			for (int i = 0; i < scaledVmMips.size(); i++) {
 				Pe pe = pgpu.getPeList().get(i);
-				pe.getPeProvisioner().allocateMipsForVm(vgpu.getVm(), scaledVmMips.get(i));
+				pe.getPeProvisioner().allocateMipsForGuest(vgpu.getUid(), scaledVmMips.get(i));
 				getVgpuPeMap().get(vgpu).add(pe);
 			}
 		}
@@ -120,8 +133,9 @@ public class VgpuSchedulerFairShare extends VgpuSchedulerTimeShared {
 		double totalMipsChange = 0.0;
 		getPgpuVgpuMap().get(pgpu).remove(vgpu);
 		for (Pe pe : getVgpuPeMap().get(vgpu)) {
-			double allocatedMipsForVm = pe.getPeProvisioner().getTotalAllocatedMipsForVm(vgpu.getVm());
-			pe.getPeProvisioner().deallocateMipsForVm(vgpu.getVm());
+			GpuPeProvisionerSimple peProvisioner = (GpuPeProvisionerSimple) pe.getPeProvisioner();
+			double allocatedMipsForVm = peProvisioner.getTotalAllocatedMipsForGuest(vgpu.getUid());
+			peProvisioner.deallocateMipsForGuest(vgpu.getUid());
 			totalMipsChange += allocatedMipsForVm;
 		}
 		getVgpuPeMap().remove(vgpu);

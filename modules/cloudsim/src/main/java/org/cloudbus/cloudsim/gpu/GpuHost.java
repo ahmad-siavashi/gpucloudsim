@@ -1,6 +1,10 @@
 package org.cloudbus.cloudsim.gpu;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import org.cloudbus.cloudsim.Host;
@@ -61,16 +65,54 @@ public class GpuHost extends Host {
 	public double updateVgpusProcessing(double currentTime) {
 		double smallerTime = Double.MAX_VALUE;
 		if (isGpuEquipped()) {
-			// Update resident vGPUs
-			for (Vgpu vgpu : getVideoCardAllocationPolicy().getVgpuVideoCardMap().keySet()) {
-				double time = vgpu.updateGpuTaskProcessing(currentTime, getVideoCardAllocationPolicy()
-						.getVgpuVideoCardMap().get(vgpu).getVgpuScheduler().getAllocatedMipsForVgpu(vgpu));
-				if (time > 0.0 && time < smallerTime) {
-					smallerTime = time;
-				}
+			List<Vgpu> runningVgpus = getRunningVgpus();
+			smallerTime = updateVgpusProcessing(currentTime, new ArrayList<Vgpu>(runningVgpus));
+			// Tasks have started or finished, which may change the MIPS of vGPUs
+			if (!runningVgpus.equals(getRunningVgpus())) {
+				smallerTime = updateVgpusProcessing(currentTime, getRunningVgpus());
 			}
 		}
 		return smallerTime;
+	}
+
+	/**
+	 * Updates resident vGPUs. The MIPS of all vGPUs are read before any of them is
+	 * updated, as they belong to the time that has passed.
+	 */
+	protected double updateVgpusProcessing(double currentTime, List<Vgpu> runningVgpus) {
+		double smallerTime = Double.MAX_VALUE;
+		Map<Vgpu, List<Double>> vgpuMips = new LinkedHashMap<Vgpu, List<Double>>();
+		for (Vgpu vgpu : getVideoCardAllocationPolicy().getVgpuVideoCardMap().keySet()) {
+			vgpuMips.put(vgpu, getVgpuMips(vgpu, runningVgpus));
+		}
+		for (Entry<Vgpu, List<Double>> entry : vgpuMips.entrySet()) {
+			double time = entry.getKey().updateGpuTaskProcessing(currentTime, entry.getValue());
+			if (time > 0.0 && time < smallerTime) {
+				smallerTime = time;
+			}
+		}
+		return smallerTime;
+	}
+
+	/**
+	 * @return the MIPS that are available to the vGPU
+	 */
+	protected List<Double> getVgpuMips(Vgpu vgpu, List<Vgpu> runningVgpus) {
+		return getVideoCardAllocationPolicy().getVgpuVideoCardMap().get(vgpu).getVgpuScheduler()
+				.getAllocatedMipsForVgpu(vgpu);
+	}
+
+	/**
+	 * @return resident vGPUs that have running tasks
+	 */
+	protected List<Vgpu> getRunningVgpus() {
+		List<Vgpu> runningVgpus = new ArrayList<Vgpu>();
+		for (Vgpu vgpu : getVideoCardAllocationPolicy().getVgpuVideoCardMap().keySet()) {
+			if (vgpu.getGpuTaskScheduler().runningTasks() > 0) {
+				runningVgpus.add(vgpu);
+			}
+		}
+		return runningVgpus;
 	}
 
 	@Override

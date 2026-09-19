@@ -30,23 +30,38 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 		setUsedPes(new ArrayList<Integer>());
 	}
 
-	protected boolean redistributeGpuTaskMips(ResGpuTask rgt) {
-		int numberOfCurrentAvailablePEs = getCurrentMipsShare().size() - getUsedPes().size();
-		int numberOfAllocatedPes = rgt.getPeIdList().size();
-		if (numberOfAllocatedPes < rgt.getGpuTask().getPesLimit() && numberOfCurrentAvailablePEs > numberOfAllocatedPes) {
-			for (int i = 0; i < getCurrentMipsShare().size(); i++) {
-				if (!getUsedPes().contains(i)) {
-					rgt.setPeId(i);
-					getUsedPes().add(i);
-					numberOfAllocatedPes++;
-					if (numberOfAllocatedPes == rgt.getGpuTask().getPesLimit()) {
-						break;
-					}
-				}
+	/**
+	 * Allocates unused PEs to the task until it reaches its PEs limit. A limit of
+	 * zero means no limit.
+	 * 
+	 * @return $true if a PE is allocated; $false otherwise
+	 */
+	protected boolean allocatePes(ResGpuTask rgt) {
+		boolean allocated = false;
+		final int pesLimit = rgt.getGpuTask().getPesLimit();
+		for (int i = 0; i < getCurrentMipsShare().size(); i++) {
+			if (pesLimit > 0 && rgt.getPeIdList().size() >= pesLimit) {
+				break;
 			}
-			return true;
+			if (!getUsedPes().contains(i)) {
+				rgt.setPeId(i);
+				getUsedPes().add(i);
+				allocated = true;
+			}
 		}
-		return false;
+		return allocated;
+	}
+
+	/**
+	 * Releases the PEs of a task that leaves the execution list without finishing.
+	 */
+	protected void releasePes(ResGpuTask rgt) {
+		getUsedPes().removeAll(rgt.getPeIdList());
+		rgt.getPeIdList().clear();
+	}
+
+	protected boolean redistributeGpuTaskMips(ResGpuTask rgt) {
+		return allocatePes(rgt);
 	}
 
 	@Override
@@ -84,32 +99,12 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 			}
 		}
 
-		// for each finished task, add a new one from the waiting list
-		if (!getTaskWaitingList().isEmpty()) {
-			for (int i = 0; i < finished; i++) {
-				toRemove.clear();
-				for (ResGpuTask rcl : getTaskWaitingList()) {
-					int numberOfCurrentAvailablePEs = getCurrentMipsShare().size() - getUsedPes().size();
-					if (numberOfCurrentAvailablePEs > 0) {
-						rcl.setTaskStatus(GpuTask.INEXEC);
-						int numberOfAllocatedPes = 0;
-						for (int k = 0; k < mipsShare.size(); k++) {
-							if (!getUsedPes().contains(k)) {
-								rcl.setPeId(k);
-								getUsedPes().add(k);
-								numberOfAllocatedPes += 1;
-								if (numberOfAllocatedPes == rcl.getGpuTask().getPesLimit()) {
-									break;
-								}
-							}
-						}
-						getTaskExecList().add(rcl);
-						toRemove.add(rcl);
-						break;
-					}
-				}
-				getTaskWaitingList().removeAll(toRemove);
-			}
+		// while there are unused PEs, add tasks from the waiting list
+		while (!getTaskWaitingList().isEmpty() && getCurrentMipsShare().size() > getUsedPes().size()) {
+			ResGpuTask rcl = getTaskWaitingList().remove(0);
+			rcl.setTaskStatus(GpuTask.INEXEC);
+			allocatePes(rcl);
+			getTaskExecList().add(rcl);
 		}
 
 		// estimate finish time of tasks in the execution queue
@@ -143,6 +138,7 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 					taskFinish(rcl);
 				} else {
 					rcl.setTaskStatus(GpuTask.CANCELED);
+					releasePes(rcl);
 				}
 				return rcl.getGpuTask();
 			}
@@ -191,6 +187,7 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 				taskFinish(rgl);
 			} else {
 				rgl.setTaskStatus(GpuTask.PAUSED);
+				releasePes(rgl);
 				getTaskPausedList().add(rgl);
 			}
 			return true;
@@ -257,12 +254,7 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 			// it can go to the exec list
 			if (numberOfCurrentAvailablePEs > 0) {
 				rcl.setTaskStatus(GpuTask.INEXEC);
-				for (int i = 0; i < rcl.getNumberOfBlocks() && i < getCurrentMipsShare().size(); i++) {
-					if (!getUsedPes().contains(i)) {
-						rcl.setPeId(i);
-						getUsedPes().add(i);
-					}
-				}
+				allocatePes(rcl);
 
 				getTaskExecList().add(rcl);
 
@@ -305,17 +297,7 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 		// it can go to the exec list
 		if (numberOfCurrentAvailablePEs > 0) {
 			rgt.setTaskStatus(GpuTask.INEXEC);
-			int numberOfAllocatedPes = 0;
-			for (int i = 0; i < getCurrentMipsShare().size(); i++) {
-				if (!getUsedPes().contains(i)) {
-					rgt.setPeId(i);
-					getUsedPes().add(i);
-					numberOfAllocatedPes++;
-					if (numberOfAllocatedPes == rgt.getGpuTask().getPesLimit()) {
-						break;
-					}
-				}
-			}
+			allocatePes(rgt);
 			getTaskExecList().add(rgt);
 			return getEstimatedFinishTime(rgt);
 		} else {// no enough free PEs: go to the waiting queue
@@ -344,19 +326,17 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 	 * @pre $none
 	 * @post $none
 	 * 
-	 * @todo it doesn't check if the list is empty
 	 */
 	// TODO: Test it
 	@Override
 	public GpuTask migrateTask() {
+		if (getTaskExecList().isEmpty()) {
+			return null;
+		}
 		ResGpuTask rcl = getTaskExecList().remove(0);
 		rcl.finalizeTask();
 		GpuTask cl = rcl.getGpuTask();
-		List<Integer> pesToRemove = new ArrayList<>();
-		for (Integer peId : getUsedPes()) {
-			pesToRemove.add(peId);
-		}
-		getUsedPes().removeAll(pesToRemove);
+		releasePes(rcl);
 		return cl;
 	}
 
@@ -441,94 +421,5 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 	protected void setUsedPes(List<Integer> usedPes) {
 		this.usedPes = usedPes;
 	}
-
-	/**
-	 * Returns a gpu task with memory transfer to complete. The gpu task is selected
-	 * from a waiting list if there was no gpu task with memory transfer in
-	 * progress. If the waiting list was empty, null is returned.
-	 * 
-	 * @param currentAllocatedGddram the memory that is allocated to the vgpu which
-	 *                               this scheduler is associated with
-	 * @return a gpu task with memory transfer to complete; $null otherwise
-	 */
-//	protected ResGpuTask getTaskForMemoryTransfer(int currentAllocatedGddram) {
-//		if (getMemoryTransferList().isEmpty() && getWaitingMemoryTransferList().isEmpty()) {
-//			return null;
-//		}
-//		if (getMemoryTransferList().isEmpty()) {
-//			ResGpuTask rcl = getWaitingMemoryTransferList().get(0);
-//			double requestedGddram = rcl.getGpuTask().getRequestedGddramSize();
-//			// guards
-//			if (requestedGddram > currentAllocatedGddram) {
-//				Log.printConcatLine(
-//						CloudSim.clock()
-//								+ ": the requested memory is more than that of allocated for the Vgpu: GpuTaskId: #",
-//						rcl.getGpuTask().getTaskId());
-//				System.exit(-1);
-//			} else if (rcl.getGpuTask().getTaskInputSize() > requestedGddram
-//					|| rcl.getGpuTask().getTaskOutputSize() > requestedGddram) {
-//				Log.printConcatLine(
-//						CloudSim.clock() + ": task's H2D/D2H transfers are larger than requested memory: GpuTaskId: #",
-//						rcl.getGpuTask().getTaskId());
-//				System.exit(-1);
-//			}
-//			int currentAvailableGddram = currentAllocatedGddram - usedGddram;
-//			if (requestedGddram <= currentAvailableGddram) {
-//				getWaitingMemoryTransferList().remove(rcl);
-//				getMemoryTransferList().add(rcl);
-//				this.usedGddram += requestedGddram;
-//				if (rcl.lastMemoryTransferTime == 0) {
-//					rcl.setTaskMemoryTransferStartTime(CloudSim.clock());
-//				}
-//				return rcl;
-//			}
-//		} else {
-//			ResGpuTask rcl = getMemoryTransferList().get(0);
-//			if (rcl.lastMemoryTransferTime == 0) {
-//				rcl.setTaskMemoryTransferStartTime(CloudSim.clock());
-//			}
-//			return rcl;
-//		}
-//		return null;
-//	}
-
-//	@Override
-//	public double updateTaskMemoryTransfer(double currentTime, int currentAllocatedGddram, long allocatedBw) {
-//		double time = Double.MAX_VALUE;
-//		ResGpuTask rcl = getTaskForMemoryTransfer(currentAllocatedGddram);
-//		if (rcl == null) {
-//			return time;
-//		}
-//		double timeSpan = currentTime - rcl.lastMemoryTransferTime;
-//		rcl.updateTaskMemoryTransfer(timeSpan * allocatedBw);
-//		if (rcl.getRemainingTaskMemoryTransfer() == 0) {
-//			taskMemoryTransferFinish(rcl);
-//			rcl = getTaskForMemoryTransfer(currentAllocatedGddram);
-//			if (rcl == null) {
-//				return time;
-//			}
-//		}
-//		rcl.lastMemoryTransferTime = currentTime;
-//		time = rcl.getRemainingTaskMemoryTransfer() / allocatedBw;
-//		return time;
-//	}
-
-//	@Override
-//	public void taskMemoryTransferFinish(ResGpuTask rcl) {
-//		if (rcl.getTaskStatus() == GpuTask.MEMORY_TRANSFER_HOST_TO_DEVICE) {
-//			rcl.setTaskMemoryTransferEndTime(CloudSim.clock());
-//			getMemoryTransferList().remove(rcl);
-//			getMemoryTransferFinishedList().add(rcl);
-//
-//		} else if (rcl.getTaskStatus() == GpuTask.MEMORY_TRANSFER_DEVICE_TO_HOST) {
-//			rcl.setTaskMemoryTransferEndTime(CloudSim.clock());
-//			getMemoryTransferList().remove(rcl);
-//			getMemoryTransferFinishedList().add(rcl);
-//			usedGddram -= rcl.getGpuTask().getRequestedGddramSize();
-//			rcl.finalizeMemoryTransfers();
-//			getTaskFinishedList().add(rcl);
-//		}
-//		rcl.lastMemoryTransferTime = 0;
-//	}
 
 }
