@@ -35,7 +35,8 @@ import org.cloudbus.cloudsim.gpu.VideoCardTags;
 import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicy;
 import org.cloudbus.cloudsim.gpu.allocation.VideoCardAllocationPolicySimple;
 import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuSchedulerBestEffort;
-import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuSchedulerFairShareEx;
+import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuSchedulerEqualShare;
+import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuSchedulerFixedShare;
 import org.cloudbus.cloudsim.gpu.hardware_assisted.grid.GridVgpuTags;
 import org.cloudbus.cloudsim.gpu.performance.models.PerformanceModelGpuNull;
 import org.cloudbus.cloudsim.gpu.provisioners.GpuBwProvisionerShared;
@@ -58,13 +59,15 @@ import de.vandermeer.asciitable.AsciiTable;
  * NVIDIA vGPU software, an L40S takes at most three 16 GB vGPUs, so the fourth
  * VM is rejected. Two of the placed VMs run a GPU task; the third stays
  * idle. <br>
- * The simulation runs twice to compare the time-sliced vGPU schedulers of
- * NVIDIA vGPU software. Best effort, the default, divides the pGPU among the
+ * The simulation runs three times to compare the time-sliced vGPU schedulers
+ * of NVIDIA vGPU software. Best effort, the default, divides the pGPU among the
  * vGPUs that have work: task 0 gets half of the pGPU while task 1 runs and the
  * whole pGPU afterwards. Equal share divides it among all resident vGPUs, idle
  * or not: task 0 gets a third while three vGPUs are resident and half after
- * VM 1 leaves. Example 3 uses mixed-size mode, in which vGPUs of different sizes
- * share a pGPU. <br>
+ * VM 1 leaves. Fixed share gives a vGPU one over the maximum number of vGPUs of
+ * its type, here a third of the pGPU, whatever the other vGPUs do, so a part of
+ * the pGPU stays unused. Example 3 uses mixed-size mode, in which vGPUs of
+ * different sizes share a pGPU. <br>
  * New: vGPU types, placement rules, rejection and time-sliced vGPU
  * schedulers. <br>
  * Next: Example 3 gives a VM more than one vGPU.
@@ -73,6 +76,11 @@ import de.vandermeer.asciitable.AsciiTable;
  * 
  */
 public class CloudSimGpuExample2 {
+
+	/** the time-sliced vGPU schedulers of NVIDIA vGPU software */
+	private enum Scheduler {
+		BEST_EFFORT, EQUAL_SHARE, FIXED_SHARE
+	}
 	/** The cloudlet list. */
 	private static List<GpuCloudlet> cloudletList;
 	/** The vmlist. */
@@ -94,20 +102,21 @@ public class CloudSimGpuExample2 {
 	public static void main(String[] args) {
 		Log.printLine("Starting CloudSimGpuExample2...");
 		Log.printLine("== Best effort vGPU scheduler (NVIDIA default) ==");
-		run(true);
+		run(Scheduler.BEST_EFFORT);
 		Log.printLine("== Equal share vGPU scheduler ==");
-		run(false);
+		run(Scheduler.EQUAL_SHARE);
+		Log.printLine("== Fixed share vGPU scheduler ==");
+		run(Scheduler.FIXED_SHARE);
 		Log.printLine("CloudSimGpuExample2 finished!");
 	}
 
 	/**
 	 * Runs the simulation.
 	 * 
-	 * @param bestEffort whether pGPUs use the best effort vGPU scheduler, or the
-	 *                   equal share one otherwise
+	 * @param scheduler the time-sliced vGPU scheduler of the pGPUs
 	 */
 	@SuppressWarnings("unused")
-	private static void run(boolean bestEffort) {
+	private static void run(Scheduler scheduler) {
 		try {
 			// number of cloud users
 			int num_user = 1;
@@ -119,7 +128,7 @@ public class CloudSimGpuExample2 {
 			CloudSim.init(num_user, calendar, trace_flag);
 
 			// Create one Datacenter
-			GpuDatacenter datacenter = createDatacenter("Datacenter", bestEffort);
+			GpuDatacenter datacenter = createDatacenter("Datacenter", scheduler);
 
 			// Create one Broker
 			GpuDatacenterBroker broker = createBroker("Broker");
@@ -242,12 +251,12 @@ public class CloudSimGpuExample2 {
 	/**
 	 * Create a datacenter.
 	 * 
-	 * @param name       the name of the datacenter
-	 * @param bestEffort whether pGPUs use the best effort vGPU scheduler
+	 * @param name      the name of the datacenter
+	 * @param scheduler the time-sliced vGPU scheduler of the pGPUs
 	 * 
 	 * @return the datacenter
 	 */
-	private static GpuDatacenter createDatacenter(String name, boolean bestEffort) {
+	private static GpuDatacenter createDatacenter(String name, Scheduler scheduler) {
 		// We need to create a list to store our machines
 		List<GpuHost> hostList = new ArrayList<GpuHost>();
 		// Number of host's video cards
@@ -271,11 +280,21 @@ public class CloudSimGpuExample2 {
 			// Pgpu selection policy
 			PgpuSelectionPolicy pgpuSelectionPolicy = new PgpuSelectionPolicySimple();
 			// Vgpu Scheduler; pGPUs are in equal-size mode by default
-			VgpuScheduler vgpuScheduler = bestEffort
-					? new GridVgpuSchedulerBestEffort(VideoCardTags.NVIDIA_L40S_CARD, pgpus, pgpuSelectionPolicy,
-							new PerformanceModelGpuNull())
-					: new GridVgpuSchedulerFairShareEx(VideoCardTags.NVIDIA_L40S_CARD, pgpus, pgpuSelectionPolicy,
-							new PerformanceModelGpuNull());
+			VgpuScheduler vgpuScheduler = null;
+			switch (scheduler) {
+			case BEST_EFFORT:
+				vgpuScheduler = new GridVgpuSchedulerBestEffort(VideoCardTags.NVIDIA_L40S_CARD, pgpus,
+						pgpuSelectionPolicy, new PerformanceModelGpuNull());
+				break;
+			case EQUAL_SHARE:
+				vgpuScheduler = new GridVgpuSchedulerEqualShare(VideoCardTags.NVIDIA_L40S_CARD, pgpus,
+						pgpuSelectionPolicy, new PerformanceModelGpuNull());
+				break;
+			case FIXED_SHARE:
+				vgpuScheduler = new GridVgpuSchedulerFixedShare(VideoCardTags.NVIDIA_L40S_CARD, pgpus,
+						pgpuSelectionPolicy, new PerformanceModelGpuNull());
+				break;
+			}
 			// PCI Express Bus Bw Provisioner
 			VideoCardBwProvisioner videoCardBwProvisioner = new VideoCardBwProvisionerShared(BusTags.PCI_E_4_X16_BW);
 			// Create a video card

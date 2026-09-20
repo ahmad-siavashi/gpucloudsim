@@ -5,34 +5,36 @@ import java.util.List;
 import org.cloudbus.cloudsim.gpu.Pgpu;
 import org.cloudbus.cloudsim.gpu.Vgpu;
 import org.cloudbus.cloudsim.gpu.VgpuScheduler;
+import org.cloudbus.cloudsim.gpu.VgpuSchedulerFairShare;
 import org.cloudbus.cloudsim.gpu.VideoCardTags;
 import org.cloudbus.cloudsim.gpu.performance.PerformanceVgpuSchedulerFairShareEx;
 import org.cloudbus.cloudsim.gpu.performance.models.PerformanceModel;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicy;
 
 /**
- * This is a Time-Shared vgpu scheduler, which allows over-subscription. In
- * other words, the scheduler still allows the allocation of Vgpus that require
- * more GPU capacity than is available. OverSubscription results in performance
- * degradation. This scheduler can be considered as fair-share scheduler which
- * in turn is a time-sliced round-robin scheduler. It places vGPUs by
- * {@link GridVgpuPlacement}.
- * 
+ * The equal share scheduler of NVIDIA vGPU software. A GPU is divided equally
+ * among the vGPUs that reside on it, whether they have running tasks or not, so
+ * the share of a vGPU changes only when another vGPU is added to the GPU or
+ * removed from it. Every vGPU type is time-sliced and hence requests the whole
+ * GPU (see {@link GridVgpuTags}), so the proportional share of
+ * {@link VgpuSchedulerFairShare} gives every vGPU of a GPU an equal share. It
+ * places vGPUs by {@link GridVgpuPlacement}.
+ *
  * @author Ahmad Siavashi
  */
-public class GridVgpuSchedulerFairShareEx extends PerformanceVgpuSchedulerFairShareEx {
+public class GridVgpuSchedulerEqualShare extends PerformanceVgpuSchedulerFairShareEx {
 
 	protected final GridVgpuPlacement placement;
 
 	/**
-	 * Instantiates a new fair-share vgpu scheduler.
+	 * Instantiates a new equal share vgpu scheduler.
 	 * 
 	 * @param videoCardType the video card type (see {@link VideoCardTags})
 	 * @param pgpuList      the list of gpu PEs of the video card where the
 	 *                      VgpuScheduler is associated to.
 	 * @param mixedSize     whether the GPUs are in mixed-size mode
 	 */
-	public GridVgpuSchedulerFairShareEx(String videoCardType, List<Pgpu> pgpuList,
+	public GridVgpuSchedulerEqualShare(String videoCardType, List<Pgpu> pgpuList,
 			PgpuSelectionPolicy pgpuSelectionPolicy, PerformanceModel<VgpuScheduler, Vgpu> performanceModel,
 			boolean mixedSize) {
 		super(videoCardType, pgpuList, pgpuSelectionPolicy, performanceModel);
@@ -40,10 +42,10 @@ public class GridVgpuSchedulerFairShareEx extends PerformanceVgpuSchedulerFairSh
 	}
 
 	/**
-	 * Instantiates a new fair-share vgpu scheduler whose GPUs are in equal-size mode,
-	 * which is the default of NVIDIA vGPU software.
+	 * Instantiates a new equal share vgpu scheduler whose GPUs are in equal-size
+	 * mode, which is the default of NVIDIA vGPU software.
 	 */
-	public GridVgpuSchedulerFairShareEx(String videoCardType, List<Pgpu> pgpuList,
+	public GridVgpuSchedulerEqualShare(String videoCardType, List<Pgpu> pgpuList,
 			PgpuSelectionPolicy pgpuSelectionPolicy, PerformanceModel<VgpuScheduler, Vgpu> performanceModel) {
 		this(videoCardType, pgpuList, pgpuSelectionPolicy, performanceModel, false);
 	}

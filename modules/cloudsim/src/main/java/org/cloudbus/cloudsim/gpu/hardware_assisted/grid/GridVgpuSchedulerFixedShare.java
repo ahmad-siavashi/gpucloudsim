@@ -12,43 +12,44 @@ import org.cloudbus.cloudsim.gpu.performance.models.PerformanceModel;
 import org.cloudbus.cloudsim.gpu.selection.PgpuSelectionPolicy;
 
 /**
- * The best effort scheduler, which is the default time-sliced scheduler of
- * NVIDIA vGPU software. A GPU is shared in a round-robin fashion among its
- * vGPUs that have running tasks, so a vGPU uses the GPU cycles that idle vGPUs
- * leave. On the contrary, {@link GridVgpuSchedulerEqualShare} gives every vGPU
- * of a GPU an equal share whether the other vGPUs are idle or not, which is the
- * equal share scheduler of NVIDIA vGPU software.
+ * The fixed share scheduler of NVIDIA vGPU software. A vGPU always gets the
+ * same share of its GPU, which is one over the maximum number of vGPUs of its
+ * type that the GPU accepts. The share does not change when other vGPUs are
+ * added to the GPU or removed from it, so a GPU with fewer vGPUs than its
+ * maximum leaves cycles unused. On the contrary,
+ * {@link GridVgpuSchedulerEqualShare} divides a GPU among its vGPUs and
+ * {@link GridVgpuSchedulerBestEffort} among those that have running tasks.
  *
  * @author Ahmad Siavashi
  */
-public class GridVgpuSchedulerBestEffort extends GridVgpuSchedulerEqualShare {
+public class GridVgpuSchedulerFixedShare extends GridVgpuSchedulerEqualShare {
 
 	/**
-	 * Instantiates a new best effort vgpu scheduler.
+	 * Instantiates a new fixed share vgpu scheduler.
 	 *
 	 * @param videoCardType the video card type (see {@link VideoCardTags})
 	 * @param pgpuList      the list of gpu PEs of the video card where the
 	 *                      VgpuScheduler is associated to.
 	 * @param mixedSize     whether the GPUs are in mixed-size mode
 	 */
-	public GridVgpuSchedulerBestEffort(String videoCardType, List<Pgpu> pgpuList,
+	public GridVgpuSchedulerFixedShare(String videoCardType, List<Pgpu> pgpuList,
 			PgpuSelectionPolicy pgpuSelectionPolicy, PerformanceModel<VgpuScheduler, Vgpu> performanceModel,
 			boolean mixedSize) {
 		super(videoCardType, pgpuList, pgpuSelectionPolicy, performanceModel, mixedSize);
 	}
 
 	/**
-	 * Instantiates a new best effort vgpu scheduler whose GPUs are in equal-size
+	 * Instantiates a new fixed share vgpu scheduler whose GPUs are in equal-size
 	 * mode, which is the default of NVIDIA vGPU software.
 	 */
-	public GridVgpuSchedulerBestEffort(String videoCardType, List<Pgpu> pgpuList,
+	public GridVgpuSchedulerFixedShare(String videoCardType, List<Pgpu> pgpuList,
 			PgpuSelectionPolicy pgpuSelectionPolicy, PerformanceModel<VgpuScheduler, Vgpu> performanceModel) {
 		super(videoCardType, pgpuList, pgpuSelectionPolicy, performanceModel);
 	}
 
 	/**
-	 * The GPU is divided among the vGPU and the other vGPUs of the GPU that have
-	 * running tasks.
+	 * The GPU is divided by the maximum number of vGPUs of the type of the vGPU,
+	 * whether that many reside on the GPU or not.
 	 */
 	@Override
 	public List<Double> getAllocatedMipsForVgpu(Vgpu vgpu) {
@@ -56,17 +57,21 @@ public class GridVgpuSchedulerBestEffort extends GridVgpuSchedulerEqualShare {
 		if (pgpu == null) {
 			return super.getAllocatedMipsForVgpu(vgpu);
 		}
-		int vgpus = 1;
-		for (Vgpu other : getPgpuVgpuMap().get(pgpu)) {
-			if (other != vgpu && other.getGpuTaskScheduler().runningTasks() > 0) {
-				vgpus++;
-			}
-		}
+		int vgpus = getMaxVgpusOfType(vgpu);
 		List<Double> mips = new ArrayList<Double>();
 		for (Pe pe : pgpu.getPeList()) {
 			mips.add(Math.floor(pe.getMips() / vgpus));
 		}
 		return mips;
+	}
+
+	/**
+	 * @return the maximum number of vGPUs of the type of the vGPU that a GPU
+	 *         accepts, which is the number of placements of its size
+	 */
+	protected int getMaxVgpusOfType(Vgpu vgpu) {
+		final int sizeGb = vgpu.getGddram() / 1024;
+		return GridVideoCardTags.getPlacements(getVideoCardType()).getIds(sizeGb, false).length;
 	}
 
 }
