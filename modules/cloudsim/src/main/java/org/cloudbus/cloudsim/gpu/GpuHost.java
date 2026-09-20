@@ -66,7 +66,7 @@ public class GpuHost extends Host {
 		double smallerTime = Double.MAX_VALUE;
 		if (isGpuEquipped()) {
 			List<Vgpu> runningVgpus = getRunningVgpus();
-			smallerTime = updateVgpusProcessing(currentTime, new ArrayList<Vgpu>(runningVgpus));
+			smallerTime = updateVgpusProcessing(currentTime, runningVgpus);
 			// Tasks have started or finished, which may change the MIPS of vGPUs
 			if (!runningVgpus.equals(getRunningVgpus())) {
 				smallerTime = updateVgpusProcessing(currentTime, getRunningVgpus());

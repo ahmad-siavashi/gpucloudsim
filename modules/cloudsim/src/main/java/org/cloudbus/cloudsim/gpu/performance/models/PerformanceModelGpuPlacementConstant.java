@@ -38,20 +38,19 @@ public class PerformanceModelGpuPlacementConstant extends PerformanceModelGpuCon
 
 	@Override
 	public List<Double> getAvailableMips(VgpuScheduler scheduler, Vgpu vgpu, List<Vgpu> vgpus) {
-		List<Vgpu> toRemove = new ArrayList<Vgpu>();
-		// TODO: Is this necessary?
+		// The vgpus that may degrade the performance of this one; idle vgpus do not,
+		// as the class assumes. The given list belongs to the caller.
+		List<Vgpu> others = new ArrayList<Vgpu>();
 		for (Vgpu v : vgpus) {
-			if (v.getGpuTaskScheduler().runningTasks() == 0) {
-				toRemove.add(v);
+			if (v != vgpu && v.getGpuTaskScheduler().runningTasks() > 0) {
+				others.add(v);
 			}
 		}
-		vgpus.remove(vgpu);
-		vgpus.removeAll(toRemove);
 		List<Double> allocatedMips = scheduler.getAllocatedMipsForVgpu(vgpu);
-		List<Double> availableMips = super.getAvailableMips(scheduler, vgpu, vgpus);
+		List<Double> availableMips = super.getAvailableMips(scheduler, vgpu, others);
 		for (Entry<Pgpu, List<Vgpu>> entry : scheduler.getPgpuVgpuMap().entrySet()) {
 			if (entry.getValue().contains(vgpu)) {
-				if (Collections.disjoint(entry.getValue(), vgpus)) {
+				if (Collections.disjoint(entry.getValue(), others)) {
 					return allocatedMips;
 				}
 				return availableMips;

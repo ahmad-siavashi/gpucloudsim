@@ -1,6 +1,5 @@
 package org.cloudbus.cloudsim.gpu.performance;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import org.cloudbus.cloudsim.Pe;
@@ -43,8 +42,7 @@ public class PerformanceGpuHost extends GpuHost {
 		@SuppressWarnings("unchecked")
 		PerformanceScheduler<Vgpu> vgpuScheduler = (PerformanceScheduler<Vgpu>) getVideoCardAllocationPolicy()
 				.getVgpuVideoCardMap().get(vgpu).getVgpuScheduler();
-		// performance models may modify the list
-		return vgpuScheduler.getAvailableMips(vgpu, new ArrayList<Vgpu>(runningVgpus));
+		return vgpuScheduler.getAvailableMips(vgpu, runningVgpus);
 	}
 
 }
