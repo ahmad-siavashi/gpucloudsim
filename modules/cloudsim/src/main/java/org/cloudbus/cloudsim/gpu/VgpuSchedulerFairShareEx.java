@@ -19,7 +19,6 @@ public class VgpuSchedulerFairShareEx extends VgpuSchedulerFairShare {
 	public VgpuSchedulerFairShareEx(String videoCardType, List<Pgpu> pgpuList,
 			PgpuSelectionPolicy pgpuSelectionPolicy) {
 		super(videoCardType, pgpuList, pgpuSelectionPolicy);
-		// TODO Auto-generated constructor stub
 	}
 
 	/**

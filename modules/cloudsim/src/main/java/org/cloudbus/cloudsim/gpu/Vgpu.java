@@ -443,9 +443,7 @@ public class Vgpu {
 	/**
 	 * Gets the current allocated mips.
 	 * 
-	 * @return the current allocated mips
-	 * @TODO replace returning the field by a call to
-	 *       getThreadScheduler().getCurrentMipsShare()
+	 * @return the current allocated mips, as the vgpu scheduler set them
 	 */
 	public List<Double> getCurrentAllocatedMips() {
 		return currentAllocatedMips;
