@@ -119,7 +119,6 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 		return nextEvent;
 	}
 
-	// TODO: Test it
 	@Override
 	public GpuTask taskCancel(int taskId) {
 		// First, looks in the finished queue
@@ -165,7 +164,6 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 
 	}
 
-	// TODO: Test it
 	@Override
 	public boolean taskPause(int taskId) {
 		boolean found = false;
@@ -233,7 +231,6 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 		getTaskFinishedList().add(rcl);
 	}
 
-	// TODO: Test it
 	@Override
 	public double taskResume(int taskId) {
 		boolean found = false;
@@ -327,7 +324,6 @@ public class GpuTaskSchedulerLeftover extends GpuTaskScheduler {
 	 * @post $none
 	 * 
 	 */
-	// TODO: Test it
 	@Override
 	public GpuTask migrateTask() {
 		if (getTaskExecList().isEmpty()) {
