@@ -1,5 +1,6 @@
 package org.cloudbus.cloudsim.gpu;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.cloudbus.cloudsim.Datacenter;
@@ -8,6 +9,7 @@ import org.cloudbus.cloudsim.Log;
 import org.cloudbus.cloudsim.Storage;
 import org.cloudbus.cloudsim.Vm;
 import org.cloudbus.cloudsim.VmAllocationPolicy;
+import org.cloudbus.cloudsim.VmAllocationPolicy.GuestMapping;
 import org.cloudbus.cloudsim.core.CloudActionTags;
 import org.cloudbus.cloudsim.core.CloudSim;
 import org.cloudbus.cloudsim.core.CloudSimTags;
@@ -215,6 +217,89 @@ public class GpuDatacenter extends Datacenter {
 	protected void refreshGpuTaskProcessing() {
 		setGpuTaskLastProcessTime(Double.NEGATIVE_INFINITY);
 		updateGpuTaskProcessing();
+	}
+
+	@Override
+	protected void processVmMigrate(SimEvent ev, boolean ack) {
+		GuestMapping migrate = (GuestMapping) ev.getData();
+		GpuVm vm = (GpuVm) migrate.vm();
+		// A migrating vGPU changes the MIPS of the vGPUs of both pGPUs
+		updateGpuTaskProcessing();
+		if (vm.hasVgpu() && !isVgpuMigrating(vm)) {
+			// The VM moves once the frame buffer of its vgpus reached the destination
+			startVgpuMigration(vm);
+			refreshGpuTaskProcessing();
+			send(getId(), getVgpuMigrationTime(vm, (GpuHost) migrate.host()),
+					ack ? CloudActionTags.VM_MIGRATE_ACK : CloudActionTags.VM_MIGRATE, migrate);
+			return;
+		}
+		// The vgpus run again before they move, as the MIPS that a pgpu gives them
+		// may depend on the MIPS that their tasks request
+		finishVgpuMigration(vm);
+		// A vgpu is created anew on its destination, so it asks for the resources of
+		// its type and not for those that its tasks happen to use at this instant
+		setVgpusBeingInstantiated(vm, true);
+		super.processVmMigrate(ev, ack);
+		setVgpusBeingInstantiated(vm, false);
+		refreshGpuTaskProcessing();
+	}
+
+	protected void setVgpusBeingInstantiated(GpuVm vm, boolean beingInstantiated) {
+		for (Vgpu vgpu : vm.getVgpuList()) {
+			vgpu.setBeingInstantiated(beingInstantiated);
+		}
+	}
+
+	/**
+	 * @return whether the frame buffer of the vgpus of the VM is being copied
+	 */
+	protected boolean isVgpuMigrating(GpuVm vm) {
+		for (Vgpu vgpu : vm.getVgpuList()) {
+			if (vgpu.isInMigration()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The time to copy the frame buffer of the vgpus of a VM to another host. As
+	 * {@link Datacenter#processVmMigrate} does for the memory of a VM, half of the
+	 * bandwidth of the host is available to the copy.
+	 */
+	protected double getVgpuMigrationTime(GpuVm vm, GpuHost destination) {
+		double gddram = 0;
+		for (Vgpu vgpu : vm.getVgpuList()) {
+			gddram += vgpu.getGddram();
+		}
+		return gddram / (destination.getBw() / 2.0);
+	}
+
+	/**
+	 * Stops the vgpus of a migrating VM, which do not run tasks while their frame
+	 * buffer is copied. They keep the memory of their pgpu until the VM moves.
+	 */
+	protected void startVgpuMigration(GpuVm vm) {
+		for (Vgpu vgpu : vm.getVgpuList()) {
+			vgpu.setInMigration(true);
+			GpuTaskScheduler scheduler = vgpu.getGpuTaskScheduler();
+			for (ResGpuTask rgt : new ArrayList<ResGpuTask>(scheduler.getTaskExecList())) {
+				scheduler.taskPause(rgt.getTaskId());
+			}
+		}
+	}
+
+	/**
+	 * Resumes the vgpus of a VM that reached its destination.
+	 */
+	protected void finishVgpuMigration(GpuVm vm) {
+		for (Vgpu vgpu : vm.getVgpuList()) {
+			GpuTaskScheduler scheduler = vgpu.getGpuTaskScheduler();
+			for (ResGpuTask rgt : new ArrayList<ResGpuTask>(scheduler.getTaskPausedList())) {
+				scheduler.taskResume(rgt.getTaskId());
+			}
+			vgpu.setInMigration(false);
+		}
 	}
 
 	@Override
